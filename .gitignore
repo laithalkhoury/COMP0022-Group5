@@ -1,1 +1,14 @@
 .env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# fontend folder
+# Node
+node_modules/
+frontend/dist/
+
+.claude/
+frontend/spec.md
