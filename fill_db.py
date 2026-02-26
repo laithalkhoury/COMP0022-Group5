@@ -135,8 +135,7 @@ def run_etl():
                 (row['n_int'], row['primaryName'])
             )
     
-    # Commit here so the foreign keys definitely exist for the next step
-    # conn.commit()
+
 
     # STEP 4: Populate Movie_Crew and Movie_Character
     print("Populating Movie_Crew and Movie_Character tables...")
