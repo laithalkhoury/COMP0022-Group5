@@ -1,11 +1,42 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 import pandas as pd
 import psycopg2
 import ast
 
 # Load environment variables
-load_dotenv()
+def load_environment():
+    """Load env vars from .env or the legacy `dotenv` file.
+
+    We avoid the default load_dotenv() call because python-dotenv 1.1.0 raises
+    an AssertionError in some contexts (e.g., Python 3.13 REPL). Instead we
+    explicitly point to candidate files:
+      1) .env in the current working directory
+      2) .env alongside this script
+      3) the legacy `dotenv` filename in this repo
+    """
+
+    loaded = False
+
+    candidates = [
+        Path.cwd() / ".env",                # .env from the directory you run in
+        Path(__file__).with_name(".env"),    # .env next to the script
+        Path(__file__).with_name("dotenv"),  # legacy filename
+    ]
+
+    for path in candidates:
+        if path.exists():
+            loaded = load_dotenv(dotenv_path=path, override=True) or loaded
+
+    if not loaded:
+        raise RuntimeError(
+            "No environment file found. Add DB_HOST, DB_PORT, DB_NAME, "
+            "DB_USER, DB_PASSWORD to .env or dotenv."
+        )
+
+
+load_environment()
 
 # Database connection parameters
 DB_PARAMS = {
@@ -55,10 +86,10 @@ def run_etl():
 
     # STEP 1: Populate Movie
     print("Mapping Links and populating Movie table...")
-    links = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/links.csv').dropna(subset=['imdbId'])
+    links = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/ml-latest-small/links.csv').dropna(subset=['imdbId'])
     valid_movie_ids = set(links['imdbId'].astype(int))
     
-    movies_df = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/movies.csv')
+    movies_df = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/ml-latest-small/movies.csv')
     movies_merged = movies_df.merge(links, on='movieId')
     
     for _, row in movies_merged.iterrows():
@@ -73,7 +104,7 @@ def run_etl():
     referenced_crew_ids = set()
     filtered_roles_storage = [] # To avoid reading the file again
 
-    roles_iter = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/roles.tsv', sep='\t', chunksize=100000)
+    roles_iter = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/title.principals.tsv', sep='\t', chunksize=100000)
     for chunk in roles_iter:
         chunk['t_int'] = chunk['tconst'].apply(clean_id)
         chunk['n_int'] = chunk['nconst'].apply(clean_id)
@@ -93,7 +124,7 @@ def run_etl():
 
     # STEP 3: Populate Crew
     print(f"Populating Crew table with {len(referenced_crew_ids)} unique people...")
-    names_iter = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/names.tsv', sep='\t', chunksize=100000)
+    names_iter = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/name.basics.tsv', sep='\t', chunksize=100000)
     for chunk in names_iter:
         chunk['n_int'] = chunk['nconst'].apply(clean_id)
         needed_names = chunk[chunk['n_int'].isin(referenced_crew_ids)]
@@ -135,5 +166,65 @@ def run_etl():
     conn.close()
     print("ETL complete! Integrity maintained.")
 
+def run_ml_user_etl():
+    conn = psycopg2.connect(**DB_PARAMS)
+    cur = conn.cursor()
+
+    print("Populating ML_User table...")
+    ratings = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/ml-latest-small/ratings.csv')
+    unique_users = ratings['userId'].unique()
+
+    for user_id in unique_users:
+        cur.execute(
+            "INSERT INTO ML_User (ml_user_id) VALUES (%s) ON CONFLICT DO NOTHING",
+            (int(user_id),)
+        )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    print(f"ML_User ETL complete! {len(unique_users)} users inserted.")
+
+
+def run_personality_etl():
+    conn = psycopg2.connect(**DB_PARAMS)
+    cur = conn.cursor()
+
+    print("Populating person_user and person_user_recommendation tables...")
+    df = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/personality-isf2018/personality-data.csv')
+    df.columns = df.columns.str.strip()
+
+    # Pre-load valid movie IDs to avoid FK violations
+    cur.execute("SELECT movie_id FROM Movie")
+    valid_movie_ids = {row[0] for row in cur.fetchall()}
+
+    for _, row in df.iterrows():
+        cur.execute(
+            """INSERT INTO person_user
+               (person_user_id, assigned_metric, assigned_condition, openness, agreeableness, extraversion, conscientiousness, emotional_stability)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING""",
+            (row['userid'].strip(), row['assigned metric'].strip(), row['assigned condition'].strip(),
+             row['openness'], row['agreeableness'], row['extraversion'],
+             row['conscientiousness'], row['emotional_stability'])
+        )
+
+        for rank in range(1, 13):
+            movie_id = row[f'movie_{rank}']
+            predicted_rating = row[f'predicted_rating_{rank}']
+            if pd.notna(movie_id) and pd.notna(predicted_rating) and int(movie_id) in valid_movie_ids:
+                cur.execute(
+                    """INSERT INTO person_user_recommendation (person_user_id, rank_position, movie_id, predicted_rating)
+                       VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING""",
+                    (row['userid'].strip(), rank, int(movie_id), float(predicted_rating))
+                )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("Personality ETL complete!")
+
+
 if __name__ == "__main__":
     run_etl()
+    run_ml_user_etl()
+    run_personality_etl()
