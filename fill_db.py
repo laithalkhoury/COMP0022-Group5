@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import pandas as pd
 import psycopg2
 import ast
+import re
 
 # Load environment variables
 load_dotenv()
@@ -49,23 +50,98 @@ def clean_character(char_str):
         cleaned = char_str.replace('[', '').replace(']', '').replace('"', '')
         return [c.strip() for c in cleaned.split(',') if c.strip()]
 
+def extract_year(title):
+    """Extracts year from 'Title (YYYY)' string."""
+    match = re.search(r'\((\d{4})\)', title)
+    if match:
+        return int(match.group(1))
+    return None
+
+def clean_title(title):
+    """Removes the (YYYY) from the title."""
+    return re.sub(r'\s*\(\d{4}\)\s*$', '', title).strip()
+
+
 def run_etl():
     conn = psycopg2.connect(**DB_PARAMS)
     cur = conn.cursor()
 
-    # STEP 1: Populate Movie
-    print("Mapping Links and populating Movie table...")
-    links = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/links.csv').dropna(subset=['imdbId'])
+# --- PRE-STEP: Load Runtimes from IMDb basics ---
+    print("Loading runtimes from title.basics.tsv...")
+    # Use keep_default_na=False and na_values to handle the \N strings properly
+    basics_iter = pd.read_csv('title.basics.tsv', sep='\t', 
+                              usecols=['tconst', 'runtimeMinutes'], 
+                              chunksize=100000, 
+                              low_memory=False)
+    
+    runtime_map = {}
+    for chunk in basics_iter:
+        # 1. Convert tconst to our integer ID format
+        chunk['tid'] = chunk['tconst'].apply(clean_id)
+        
+        # 2. Force runtimeMinutes to numeric. 
+        # Anything that isn't a number (like 'Reality-TV' or '\N') becomes NaN
+        chunk['runtimeMinutes'] = pd.to_numeric(chunk['runtimeMinutes'], errors='coerce')
+        
+        # 3. Drop rows where we couldn't get a valid ID or a valid runtime
+        valid_chunk = chunk.dropna(subset=['tid', 'runtimeMinutes'])
+        
+        # 4. Update the dictionary
+        for _, row in valid_chunk.iterrows():
+            runtime_map[int(row['tid'])] = int(row['runtimeMinutes'])
+
+    print(f"Runtimes loaded for {len(runtime_map)} titles.")
+
+# --- STEP 1: Populate Movie, Genre, and Movie_Genre ---
+    print("Processing movies and genres...")
+    links = pd.read_csv('links.csv').dropna(subset=['imdbId'])
+    
+    # ADD THIS LINE: This fixes the NameError
     valid_movie_ids = set(links['imdbId'].astype(int))
     
-    movies_df = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/movies.csv')
+    movies_df = pd.read_csv('movies.csv')
     movies_merged = movies_df.merge(links, on='movieId')
-    
+
     for _, row in movies_merged.iterrows():
+        imdb_id = int(row['imdbId'])
+        raw_title = row['title']
+        
+        year = extract_year(raw_title)
+        title = clean_title(raw_title)
+        # Check if runtime exists in our map, otherwise default to 0 or 90
+        runtime = runtime_map.get(imdb_id, 90) 
+        
+        # 1. Insert Movie
         cur.execute(
-            "INSERT INTO Movie (movie_id, title) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-            (int(row['imdbId']), row['title'])
+            """INSERT INTO Movie (movie_id, title, release_year, runtime) 
+               VALUES (%s, %s, %s, %s) ON CONFLICT (movie_id) DO NOTHING""",
+            (imdb_id, title, year if year else 0, runtime)
         )
+
+        # 2. Handle Genres
+        if pd.notna(row['genres']):
+            genre_list = row['genres'].split('|')
+            for g_name in genre_list:
+                if g_name == '(no genres listed)':
+                    continue
+                    
+                # Insert Genre and get the ID
+                cur.execute(
+                    """INSERT INTO Genre (name) VALUES (%s) 
+                       ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+                       RETURNING genre_id""",
+                    (g_name,)
+                )
+                genre_id = cur.fetchone()[0]
+
+                # 3. Insert Movie_Genre link
+                cur.execute(
+                    """INSERT INTO Movie_Genre (movie_id, genre_id) 
+                       VALUES (%s, %s) ON CONFLICT DO NOTHING""",
+                    (imdb_id, genre_id)
+                )
+
+    conn.commit()
 
     # STEP 2: Scan roles to find required Crew
     print("Scanning roles.tsv to identify required crew...")
@@ -73,7 +149,7 @@ def run_etl():
     referenced_crew_ids = set()
     filtered_roles_storage = [] # To avoid reading the file again
 
-    roles_iter = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/roles.tsv', sep='\t', chunksize=100000)
+    roles_iter = pd.read_csv('title.principals.tsv', sep='\t', chunksize=100000)
     for chunk in roles_iter:
         chunk['t_int'] = chunk['tconst'].apply(clean_id)
         chunk['n_int'] = chunk['nconst'].apply(clean_id)
@@ -91,9 +167,10 @@ def run_etl():
                 'role': row['category']
             })
 
+
     # STEP 3: Populate Crew
     print(f"Populating Crew table with {len(referenced_crew_ids)} unique people...")
-    names_iter = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/names.tsv', sep='\t', chunksize=100000)
+    names_iter = pd.read_csv('name.basics.tsv', sep='\t', chunksize=100000)
     for chunk in names_iter:
         chunk['n_int'] = chunk['nconst'].apply(clean_id)
         needed_names = chunk[chunk['n_int'].isin(referenced_crew_ids)]

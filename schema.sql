@@ -1,11 +1,30 @@
 CREATE TABLE Movie (
     movie_id INT PRIMARY KEY,
-    title TEXT NOT NULL
+    title TEXT NOT NULL,
+    release_year SMALLINT NOT NULL,
+    runtime INT CHECK (runtime > 0)
 );
 
-CREATE TABLE Crew (
-    crew_id INT PRIMARY KEY,
-    name TEXT NOT NULL
+CREATE TABLE Genre (
+    genre_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE
+);
+
+CREATE TABLE Movie_Genre (
+    movie_id INT NOT NULL,
+    genre_id INT NOT NULL,
+    
+    PRIMARY KEY (movie_id, genre_id),
+    
+    CONSTRAINT fk_movie
+        FOREIGN KEY (movie_id)
+        REFERENCES Movie(movie_id)
+        ON DELETE CASCADE,
+        
+    CONSTRAINT fk_genre
+        FOREIGN KEY (genre_id)
+        REFERENCES Genre(genre_id)
+        ON DELETE CASCADE
 );
 
 CREATE TABLE Movie_Crew (
@@ -55,14 +74,3 @@ JOIN Movie_Crew mc ON m.movie_id = mc.movie_id
 JOIN Crew c ON mc.crew_id = c.crew_id
 LEFT JOIN Movie_Character mch ON mc.movie_crew_id = mch.movie_crew_id
 WHERE mch.character_name LIKE '%,%';
-
-
-
-
-
--- CREATE TABLE Movie (
---     movie_id INT PRIMARY KEY,
---     title TEXT NOT NULL,
---     release_year SMALLINT NOT NULL,
---     runtime INT CHECK (runtime > 0)
--- );
