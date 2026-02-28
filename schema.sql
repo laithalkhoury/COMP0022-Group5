@@ -75,7 +75,7 @@ CREATE TABLE User_Movie_Tag (
   tag_id      BIGINT NOT NULL,
   tagged_at   TIMESTAMP NOT NULL,
 
- PRIMARY KEY (ml_user_id, movie_id, tag_id, tagged_at)
+ PRIMARY KEY (ml_user_id, movie_id, tag_id, tagged_at),
 
   CONSTRAINT fk_umt_ml_user
     FOREIGN KEY (ml_user_id)
