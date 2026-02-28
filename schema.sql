@@ -1,3 +1,7 @@
+-- =========================
+-- Movie, Crew and Genre tables (Requirement 1)
+-- =========================
+
 CREATE TABLE Movie (
     movie_id INT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -27,6 +31,11 @@ CREATE TABLE Movie_Genre (
         ON DELETE CASCADE
 );
 
+CREATE TABLE Crew (
+    crew_id INT PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
 CREATE TABLE Movie_Crew (
     movie_crew_id SERIAL PRIMARY KEY,
     movie_id INT REFERENCES Movie(movie_id) ON DELETE CASCADE,
@@ -52,6 +61,78 @@ CREATE TABLE ML_User (
     ml_user_id BIGSERIAL PRIMARY KEY
 );
 
+-- =========================
+-- Personality tables (Requirement 5)
+-- =========================
+
+CREATE TABLE Person_User (
+  person_user_id       TEXT PRIMARY KEY,
+  assigned_metric      TEXT NOT NULL,
+  assigned_condition   TEXT NOT NULL,
+  openness             NUMERIC(3,2) NOT NULL,
+  agreeableness        NUMERIC(3,2) NOT NULL,
+  extraversion         NUMERIC(3,2) NOT NULL,
+  conscientiousness    NUMERIC(3,2) NOT NULL,
+  emotional_stability  NUMERIC(3,2) NOT NULL
+);
+
+CREATE TABLE Person_User_Recommendation (
+  person_user_id   TEXT NOT NULL,
+  rank_position    SMALLINT NOT NULL CHECK (rank_position BETWEEN 1 AND 12),
+  movie_id         INT NOT NULL,
+  predicted_rating NUMERIC(3,2) NOT NULL,
+  PRIMARY KEY (person_user_id, rank_position),
+  CONSTRAINT fk_pur_person_user
+    FOREIGN KEY (person_user_id)
+    REFERENCES person_user(person_user_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_pur_movie
+    FOREIGN KEY (movie_id)
+    REFERENCES movie(movie_id)
+    ON DELETE CASCADE
+);
+
+-- =========================
+-- Planner tables (Requirement 6)
+-- =========================
+
+CREATE TABLE Collection_List (
+  collection_id    BIGSERIAL PRIMARY KEY,
+  app_user_id      BIGINT NOT NULL,
+  collection_name  TEXT NOT NULL,
+  created_at       TIMESTAMP NOT NULL,
+  updated_at       TIMESTAMP NOT NULL,
+  CONSTRAINT fk_collection_list_app_user
+    FOREIGN KEY (app_user_id)
+    REFERENCES App_User(app_user_id)
+    ON DELETE CASCADE
+);
+
+CREATE TABLE List_Item (
+  collection_id  BIGINT NOT NULL,
+  movie_id       INT NOT NULL,
+  added_at       TIMESTAMP NOT NULL,
+  note           TEXT,
+  PRIMARY KEY (collection_id, movie_id),
+  CONSTRAINT fk_list_item_collection
+    FOREIGN KEY (collection_id)
+    REFERENCES collection_list(collection_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_list_item_movie
+    FOREIGN KEY (movie_id)
+    REFERENCES movie(movie_id)
+    ON DELETE CASCADE
+);
+
+
+
+
+
+
+
+
+
+
 SELECT 
     m.movie_id, 
     m.title, 
@@ -74,3 +155,18 @@ JOIN Movie_Crew mc ON m.movie_id = mc.movie_id
 JOIN Crew c ON mc.crew_id = c.crew_id
 LEFT JOIN Movie_Character mch ON mc.movie_crew_id = mch.movie_crew_id
 WHERE mch.character_name LIKE '%,%';
+
+
+
+DROP TABLE Movie_Character;
+DROP TABLE Movie_Crew;
+DROP TABLE Crew;
+DROP TABLE Movie_Genre;
+DROP TABLE Genre;
+DROP TABLE ML_User;
+DROP TABLE Person_User_Recommendation;
+DROP TABLE Person_User;
+DROP TABLE List_Item;
+DROP TABLE Collection_List;
+DROP TABLE App_User;
+DROP TABLE Movie;
