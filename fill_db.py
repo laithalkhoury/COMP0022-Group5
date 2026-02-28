@@ -260,7 +260,7 @@ def run_personality_etl():
     cur = conn.cursor()
 
     print("Populating person_user and person_user_recommendation tables...")
-    df = pd.read_csv(FOLDER_PATH+'personality-isf2018/personality-data.csv')
+    df = pd.read_csv(FOLDER_PATH+'personality-data.csv')
     df.columns = df.columns.str.strip()
 
     # Pre-load valid movie IDs to avoid FK violations

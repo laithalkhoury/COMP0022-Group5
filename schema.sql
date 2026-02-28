@@ -179,42 +179,42 @@ CREATE TABLE List_Item (
 
 
 
-SELECT 
-    m.movie_id, 
-    m.title, 
-    c.name, 
-    mch.character_name, 
-    mc.role_name
-FROM Movie m
-JOIN Movie_Crew mc ON m.movie_id = mc.movie_id
-JOIN Crew c ON mc.crew_id = c.crew_id
-LEFT JOIN Movie_Character mch ON mc.movie_crew_id = mch.movie_crew_id;
+-- SELECT 
+--     m.movie_id, 
+--     m.title, 
+--     c.name, 
+--     mch.character_name, 
+--     mc.role_name
+-- FROM Movie m
+-- JOIN Movie_Crew mc ON m.movie_id = mc.movie_id
+-- JOIN Crew c ON mc.crew_id = c.crew_id
+-- LEFT JOIN Movie_Character mch ON mc.movie_crew_id = mch.movie_crew_id;
 
-SELECT 
-    m.movie_id, 
-    m.title, 
-    c.name, 
-    mch.character_name, 
-    mc.role_name
-FROM Movie m
-JOIN Movie_Crew mc ON m.movie_id = mc.movie_id
-JOIN Crew c ON mc.crew_id = c.crew_id
-LEFT JOIN Movie_Character mch ON mc.movie_crew_id = mch.movie_crew_id
-WHERE mch.character_name LIKE '%,%';
+-- SELECT 
+--     m.movie_id, 
+--     m.title, 
+--     c.name, 
+--     mch.character_name, 
+--     mc.role_name
+-- FROM Movie m
+-- JOIN Movie_Crew mc ON m.movie_id = mc.movie_id
+-- JOIN Crew c ON mc.crew_id = c.crew_id
+-- LEFT JOIN Movie_Character mch ON mc.movie_crew_id = mch.movie_crew_id
+-- WHERE mch.character_name LIKE '%,%';
 
 
-DROP TABLE User_Movie_Tag;
-DROP TABLE Rating;
-DROP TABLE Tag;
-DROP TABLE Movie_Character;
-DROP TABLE Movie_Crew;
-DROP TABLE Crew;
-DROP TABLE Movie_Genre;
-DROP TABLE Genre;
-DROP TABLE ML_User;
-DROP TABLE Person_User_Recommendation;
-DROP TABLE Person_User;
-DROP TABLE List_Item;
-DROP TABLE Collection_List;
-DROP TABLE App_User;
-DROP TABLE Movie;
+-- DROP TABLE User_Movie_Tag;
+-- DROP TABLE Rating;
+-- DROP TABLE Tag;
+-- DROP TABLE Movie_Character;
+-- DROP TABLE Movie_Crew;
+-- DROP TABLE Crew;
+-- DROP TABLE Movie_Genre;
+-- DROP TABLE Genre;
+-- DROP TABLE ML_User;
+-- DROP TABLE Person_User_Recommendation;
+-- DROP TABLE Person_User;
+-- DROP TABLE List_Item;
+-- DROP TABLE Collection_List;
+-- DROP TABLE App_User;
+-- DROP TABLE Movie;
