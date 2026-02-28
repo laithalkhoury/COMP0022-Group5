@@ -61,6 +61,58 @@ CREATE TABLE ML_User (
     ml_user_id BIGSERIAL PRIMARY KEY
 );
 
+
+-- Tags
+CREATE TABLE Tag (
+  tag_id    BIGSERIAL PRIMARY KEY,
+  tag_text  TEXT NOT NULL UNIQUE
+);
+
+-- User-Movie-Tag
+CREATE TABLE User_Movie_Tag (
+  ml_user_id  BIGINT NOT NULL,
+  movie_id    INT NOT NULL,
+  tag_id      BIGINT NOT NULL,
+  tagged_at   TIMESTAMP NOT NULL,
+
+ PRIMARY KEY (ml_user_id, movie_id, tag_id, tagged_at)
+
+  CONSTRAINT fk_umt_ml_user
+    FOREIGN KEY (ml_user_id)
+    REFERENCES ml_user(ml_user_id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_umt_movie
+    FOREIGN KEY (movie_id)
+    REFERENCES movie(movie_id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_umt_tag
+    FOREIGN KEY (tag_id)
+    REFERENCES tag(tag_id)
+    ON DELETE CASCADE
+);
+
+-- Ratings
+CREATE TABLE Rating (
+  ml_user_id  BIGINT NOT NULL,
+  movie_id    INT NOT NULL,
+  rating      NUMERIC(2,1) NOT NULL CHECK (rating >= 0.5 AND rating <= 5.0),
+  rated_at    TIMESTAMP NOT NULL,
+
+  PRIMARY KEY (ml_user_id, movie_id),
+
+  CONSTRAINT fk_rating_ml_user
+    FOREIGN KEY (ml_user_id)
+    REFERENCES ml_user(ml_user_id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_rating_movie
+    FOREIGN KEY (movie_id)
+    REFERENCES movie(movie_id)
+    ON DELETE CASCADE
+);
+
 -- =========================
 -- Personality tables (Requirement 5)
 -- =========================
@@ -127,12 +179,6 @@ CREATE TABLE List_Item (
 
 
 
-
-
-
-
-
-
 SELECT 
     m.movie_id, 
     m.title, 
@@ -157,7 +203,9 @@ LEFT JOIN Movie_Character mch ON mc.movie_crew_id = mch.movie_crew_id
 WHERE mch.character_name LIKE '%,%';
 
 
-
+DROP TABLE User_Movie_Tag;
+DROP TABLE Rating;
+DROP TABLE Tag;
 DROP TABLE Movie_Character;
 DROP TABLE Movie_Crew;
 DROP TABLE Crew;
