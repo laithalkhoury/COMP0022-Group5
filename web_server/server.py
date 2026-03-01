@@ -60,6 +60,27 @@ def get_movie_details(movie_id):
         cur.execute(crew_query, (movie_id,))
         crew_results = cur.fetchall()
 
+        # Get Average Rating and Rating Count
+        rating_query = """
+            SELECT 
+                ROUND(AVG(rating), 2) as avg_rating, 
+                COUNT(rating) as num_ratings
+            FROM Rating
+            WHERE movie_id = %s
+        """
+        cur.execute(rating_query, (movie_id,))
+        rating_stats = cur.fetchone()
+
+        # Get All Unique Tags
+        tag_query = """
+            SELECT DISTINCT t.tag_text
+            FROM Tag t
+            JOIN User_Movie_Tag umt ON t.tag_id = umt.tag_id
+            WHERE umt.movie_id = %s
+        """
+        cur.execute(tag_query, (movie_id,))
+        tags = [row['tag_text'] for row in cur.fetchall()]
+
         # Format the final JSON response
         movie_info = {
             "movie_id": movie['movie_id'],
@@ -67,6 +88,9 @@ def get_movie_details(movie_id):
             "release_year": movie['release_year'],
             "runtime": movie['runtime'],
             "genres": genres,
+            "average_rating": float(rating_stats['avg_rating']) if rating_stats['avg_rating'] else 0.0,
+            "rating_count": rating_stats['num_ratings'],
+            "tags": tags,
             "crew": [
                 {
                     "name": row['name'],
@@ -96,6 +120,9 @@ def search_movies():
     year_end = request.args.get('year_end', 2026)
     limit = int(request.args.get('limit', 20))
     offset = int(request.args.get('offset', 0))
+    tag = request.args.get('tag')
+    min_rating = request.args.get('min_rating')
+    max_rating = request.args.get('max_rating')
 
     conn = None
     try:
@@ -103,19 +130,24 @@ def search_movies():
         cur = conn.cursor()
 
         # Base Query
-        # We use DISTINCT because a movie joined with multiple genres/crew creates duplicate rows
+        # We use Subqueries for ratings to calculate the AVG before filtering
         query = """
-            SELECT DISTINCT m.movie_id, m.title, m.release_year, m.runtime
+            SELECT DISTINCT m.movie_id, m.title, m.release_year, m.runtime,
+                   r_stats.avg_rating
             FROM Movie m
             LEFT JOIN Movie_Genre mg ON m.movie_id = mg.movie_id
             LEFT JOIN Genre g ON mg.genre_id = g.genre_id
-            LEFT JOIN Movie_Crew mc ON m.movie_id = mc.movie_id
-            LEFT JOIN Crew c ON mc.crew_id = c.crew_id
-            WHERE m.release_year BETWEEN %s AND %s
+            LEFT JOIN (
+                SELECT movie_id, AVG(rating) as avg_rating 
+                FROM Rating 
+                GROUP BY movie_id
+            ) r_stats ON m.movie_id = r_stats.movie_id
         """
+        
+        query += " WHERE m.release_year BETWEEN %s AND %s"
         params = [year_start, year_end]
 
-        # Add Filters Dynamically
+        # Dynamic Filters
         if title:
             query += " AND m.title ILIKE %s"
             params.append(f"%{title}%")
@@ -124,7 +156,23 @@ def search_movies():
             query += " AND g.name = %s"
             params.append(genre)
 
-        # Pagination
+        if tag:
+            query += """ AND EXISTS (
+                SELECT 1 FROM User_Movie_Tag umt 
+                JOIN Tag t ON umt.tag_id = t.tag_id 
+                WHERE umt.movie_id = m.movie_id AND t.tag_text ILIKE %s
+            )"""
+            params.append(f"%{tag}%")
+
+        if min_rating:
+            query += " AND r_stats.avg_rating >= %s"
+            params.append(float(min_rating))
+        
+        if max_rating:
+            query += " AND r_stats.avg_rating <= %s"
+            params.append(float(max_rating))
+
+        # Pagination & Sorting
         query += " ORDER BY m.release_year DESC LIMIT %s OFFSET %s"
         params.extend([limit, offset])
 

@@ -5,6 +5,7 @@ import pandas as pd
 import psycopg2
 import ast
 import re
+from psycopg2.extras import execute_values
 
 # Load environment variables
 def load_environment():
@@ -259,7 +260,7 @@ def run_personality_etl():
     cur = conn.cursor()
 
     print("Populating person_user and person_user_recommendation tables...")
-    df = pd.read_csv(FOLDER_PATH+'personality-isf2018/personality-data.csv')
+    df = pd.read_csv(FOLDER_PATH+'personality-data.csv')
     df.columns = df.columns.str.strip()
 
     # Pre-load valid movie IDs to avoid FK violations
@@ -291,10 +292,207 @@ def run_personality_etl():
     conn.close()
     print("Personality ETL complete!")
 
+def load_movielens_to_imdb_map() -> dict[int, int]:
+    """
+    Map MovieLens movieId -> imdbId (int).
+    Because your Movie.movie_id is currently inserted using links.imdbId.
+    """
+    links = pd.read_csv(
+        FOLDER_PATH + "links.csv",
+        usecols=["movieId", "imdbId"],
+        dtype={"movieId": "int64", "imdbId": "string"},
+        low_memory=False
+    ).dropna(subset=["imdbId"])
+
+    # imdbId in links.csv is numeric string (no 'tt'), convert to int
+    links["imdbId"] = links["imdbId"].astype(int)
+
+    return dict(zip(links["movieId"].tolist(), links["imdbId"].tolist()))
+
+
+def run_tag_etl():
+    """
+    Fill Tag(tag_text) from MovieLens tags.csv
+    """
+    conn = psycopg2.connect(**DB_PARAMS)
+    cur = conn.cursor()
+
+    print("Populating Tag table from tags.csv...")
+
+    tags_iter = pd.read_csv(
+        FOLDER_PATH + "tags.csv",
+        usecols=["tag"],
+        chunksize=200_000,
+        low_memory=False
+    )
+
+    total_attempts = 0
+
+    for chunk in tags_iter:
+        s = chunk["tag"].dropna().astype(str).str.strip()
+        s = s[(s != "")].drop_duplicates()
+
+        rows = [(t,) for t in s.tolist()]
+        if not rows:
+            continue
+
+        total_attempts += len(rows)
+        execute_values(
+            cur,
+            """
+            INSERT INTO Tag (tag_text)
+            VALUES %s
+            ON CONFLICT (tag_text) DO NOTHING
+            """,
+            rows,
+            page_size=10_000
+        )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    print(f"Tag ETL complete! Attempted inserts: {total_attempts}.")
+
+
+def run_rating_etl():
+    """
+    Fill Rating from ratings.csv.
+    NOTE: ratings.csv.movieId must be mapped to imdbId (Movie.movie_id) via links.csv
+    """
+    conn = psycopg2.connect(**DB_PARAMS)
+    cur = conn.cursor()
+
+    print("Populating Rating table from ratings.csv...")
+    ml_to_imdb = load_movielens_to_imdb_map()
+
+    ratings_iter = pd.read_csv(
+        FOLDER_PATH + "ratings.csv",
+        usecols=["userId", "movieId", "rating", "timestamp"],
+        chunksize=200_000,
+        low_memory=False
+    )
+
+    total_upserts = 0
+
+    for chunk in ratings_iter:
+        chunk["imdb_id"] = chunk["movieId"].map(ml_to_imdb)
+        chunk = chunk.dropna(subset=["userId", "imdb_id", "rating", "timestamp"])
+
+        # epoch seconds -> naive datetime (UTC)
+        rated_at = pd.to_datetime(chunk["timestamp"], unit="s", utc=True).dt.tz_convert(None)
+
+        rows = list(
+            zip(
+                chunk["userId"].astype(int),
+                chunk["imdb_id"].astype(int),
+                chunk["rating"].astype(float),
+                rated_at
+            )
+        )
+
+        if not rows:
+            continue
+
+        total_upserts += len(rows)
+        execute_values(
+            cur,
+            """
+            INSERT INTO Rating (ml_user_id, movie_id, rating, rated_at)
+            VALUES %s
+            ON CONFLICT (ml_user_id, movie_id)
+            DO UPDATE SET
+              rating = EXCLUDED.rating,
+              rated_at = EXCLUDED.rated_at
+            """,
+            rows,
+            page_size=10_000
+        )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    print(f"Rating ETL complete! Upserted rows: {total_upserts}.")
+
+
+def run_user_movie_tag_etl():
+    """
+    Fill User_Movie_Tag from tags.csv.
+    Requires:
+      - ML_User already populated (run_ml_user_etl)
+      - Movie already populated (run_movie_etl)
+      - Tag already populated (run_tag_etl)
+    """
+    conn = psycopg2.connect(**DB_PARAMS)
+    cur = conn.cursor()
+
+    print("Populating User_Movie_Tag table from tags.csv...")
+    ml_to_imdb = load_movielens_to_imdb_map()
+
+    # Build tag_text -> tag_id map (Tag table must already be filled)
+    cur.execute("SELECT tag_id, tag_text FROM Tag")
+    tag_map = {tag_text: tag_id for (tag_id, tag_text) in cur.fetchall()}
+
+    tags_iter = pd.read_csv(
+        FOLDER_PATH + "tags.csv",
+        usecols=["userId", "movieId", "tag", "timestamp"],
+        chunksize=200_000,
+        low_memory=False
+    )
+
+    total_inserts = 0
+
+    for chunk in tags_iter:
+        chunk["imdb_id"] = chunk["movieId"].map(ml_to_imdb)
+        chunk["tag_clean"] = chunk["tag"].dropna().astype(str).str.strip()
+
+        chunk = chunk.dropna(subset=["userId", "imdb_id", "tag_clean", "timestamp"])
+        chunk = chunk[chunk["tag_clean"] != ""]
+
+        tagged_at = pd.to_datetime(chunk["timestamp"], unit="s", utc=True).dt.tz_convert(None)
+
+        rows = []
+        for user_id, imdb_id, tag_text, dt in zip(
+            chunk["userId"].astype(int),
+            chunk["imdb_id"].astype(int),
+            chunk["tag_clean"],
+            tagged_at
+        ):
+            tag_id = tag_map.get(tag_text)
+            if tag_id is None:
+                # Should not happen if run_tag_etl() ran, but safe-guard
+                continue
+            rows.append((user_id, imdb_id, tag_id, dt))
+
+        if not rows:
+            continue
+
+        total_inserts += len(rows)
+        execute_values(
+            cur,
+            """
+            INSERT INTO User_Movie_Tag (ml_user_id, movie_id, tag_id, tagged_at)
+            VALUES %s
+            ON CONFLICT DO NOTHING
+            """,
+            rows,
+            page_size=10_000
+        )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    print(f"User_Movie_Tag ETL complete! Attempted inserts: {total_inserts}.")
+
 
 
 if __name__ == "__main__":
     run_movie_etl()
     run_ml_user_etl()
     run_personality_etl()
+    run_tag_etl()
+    run_rating_etl()
+    run_user_movie_tag_etl()
     print("Full ETL complete! Integrity maintained.")
