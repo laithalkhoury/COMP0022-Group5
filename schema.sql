@@ -211,10 +211,10 @@ CREATE TABLE List_Item (
 -- DROP TABLE Crew;
 -- DROP TABLE Movie_Genre;
 -- DROP TABLE Genre;
--- DROP TABLE ML_User;
 -- DROP TABLE Person_User_Recommendation;
 -- DROP TABLE Person_User;
 -- DROP TABLE List_Item;
 -- DROP TABLE Collection_List;
+-- DROP TABLE ML_User;
 -- DROP TABLE App_User;
 -- DROP TABLE Movie;
