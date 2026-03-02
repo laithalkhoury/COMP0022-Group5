@@ -118,11 +118,15 @@ def search_movies():
     genre = request.args.get('genre')
     year_start = request.args.get('year_start', 1900)
     year_end = request.args.get('year_end', 2026)
-    limit = int(request.args.get('limit', 20))
+    # If limit isn't in the URL, it stays None
+    limit = request.args.get('limit')
+    if limit is not None:
+        limit = int(limit)
     offset = int(request.args.get('offset', 0))
     tag = request.args.get('tag')
     min_rating = request.args.get('min_rating')
     max_rating = request.args.get('max_rating')
+    crew_name = request.args.get('crew')
 
     conn = None
     try:
@@ -137,6 +141,8 @@ def search_movies():
             FROM Movie m
             LEFT JOIN Movie_Genre mg ON m.movie_id = mg.movie_id
             LEFT JOIN Genre g ON mg.genre_id = g.genre_id
+            LEFT JOIN Movie_Crew mc ON m.movie_id = mc.movie_id
+            LEFT JOIN Crew c ON mc.crew_id = c.crew_id
             LEFT JOIN (
                 SELECT movie_id, AVG(rating) as avg_rating 
                 FROM Rating 
@@ -163,6 +169,10 @@ def search_movies():
                 WHERE umt.movie_id = m.movie_id AND t.tag_text ILIKE %s
             )"""
             params.append(f"%{tag}%")
+        
+        if crew_name:
+            query += " AND c.name ILIKE %s"
+            params.append(f"%{crew_name}%")
 
         if min_rating:
             query += " AND r_stats.avg_rating >= %s"
@@ -173,8 +183,14 @@ def search_movies():
             params.append(float(max_rating))
 
         # Pagination & Sorting
-        query += " ORDER BY m.release_year DESC LIMIT %s OFFSET %s"
-        params.extend([limit, offset])
+        query += " ORDER BY m.release_year DESC"
+        
+        if limit is not None:
+            query += " LIMIT %s"
+            params.append(limit)
+            
+        query += " OFFSET %s"
+        params.append(offset)
 
         cur.execute(query, tuple(params))
         movies = cur.fetchall()
