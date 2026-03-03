@@ -23,6 +23,7 @@ def load_environment():
 
     candidates = [
         Path.cwd() / ".env", # .env from the directory you run in
+        Path(__file__).resolve().parent.parent / ".env",    # .env in the project root (one level up)
         Path(__file__).with_name(".env"), # .env next to the script
         Path(__file__).with_name("dotenv"), # legacy filename
     ]
