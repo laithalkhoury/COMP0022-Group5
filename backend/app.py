@@ -1,7 +1,11 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from flask import Flask
 from flask_cors import CORS
+
+env_path = Path(__file__).resolve().parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 from routes.movies import movies_bp
 from routes.reports import reports_bp
@@ -23,4 +27,4 @@ app.register_blueprint(planner_bp)
 app.register_blueprint(auth_bp)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5050)), debug=True)

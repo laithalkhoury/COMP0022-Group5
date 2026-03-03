@@ -1,4 +1,6 @@
-psycopg2-binary
-python-dotenv
 flask
 flask-cors
+psycopg2-binary
+python-dotenv
+PyJWT
+Werkzeug
