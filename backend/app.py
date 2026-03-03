@@ -1,7 +1,11 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from flask import Flask
 from flask_cors import CORS
+
+env_path = Path(__file__).resolve().parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 from routes.movies import movies_bp
 from routes.filters import filters_bp

@@ -19,10 +19,6 @@ def get_db_connection():
         cursor_factory=RealDictCursor
     )
 
-SECRET_KEY = os.getenv('SECRET_KEY')
-if not SECRET_KEY:
-    print("CRITICAL ERROR: SECRET_KEY is not set in .env")
-
 @auth_bp.route('/api/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -51,7 +47,11 @@ def register():
         if conn: conn.close()
 
 @auth_bp.route('/api/login', methods=['POST'])
-def login():
+def login():    
+    SECRET_KEY = os.getenv('SECRET_KEY')
+    if not SECRET_KEY:
+        return jsonify({"error": "Server secret key configuration missing"}), 500
+    
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
