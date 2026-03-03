@@ -11,20 +11,7 @@ app = Flask(__name__)
 CORS(app)
 app.register_blueprint(auth_bp) 
 
-# Database connection parameters
-DB_CONFIG = {
-    "host": os.getenv('DB_HOST'),
-    "port": os.getenv('DB_PORT'),
-    "database": os.getenv('DB_NAME'),
-    "user": os.getenv('DB_USER'),
-    "password": os.getenv('DB_PASSWORD')
-}
-
-def get_db_connection():
-    # RealDictCursor allows us to get results as Python dictionaries
-    return psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
-
-@app.route('/api/movies/<int:movie_id>', methods=['GET'])
+@movies_bp.route('/api/movies/<int:movie_id>', methods=['GET'])
 def get_movie_details(movie_id):
     conn = None
     try:
@@ -41,7 +28,7 @@ def get_movie_details(movie_id):
 
         # Get Genres
         genre_query = """
-            SELECT g.name 
+            SELECT g.name
             FROM Genre g
             JOIN Movie_Genre mg ON g.genre_id = mg.genre_id
             WHERE mg.movie_id = %s
@@ -62,8 +49,8 @@ def get_movie_details(movie_id):
 
         # Get Average Rating and Rating Count
         rating_query = """
-            SELECT 
-                ROUND(AVG(rating), 2) as avg_rating, 
+            SELECT
+                ROUND(AVG(rating), 2) as avg_rating,
                 COUNT(rating) as num_ratings
             FROM Rating
             WHERE movie_id = %s
@@ -81,7 +68,6 @@ def get_movie_details(movie_id):
         cur.execute(tag_query, (movie_id,))
         tags = [row['tag_text'] for row in cur.fetchall()]
 
-        # Format the final JSON response
         movie_info = {
             "movie_id": movie['movie_id'],
             "title": movie['title'],
@@ -109,16 +95,12 @@ def get_movie_details(movie_id):
             conn.close()
 
 
-
-
-@app.route('/api/movies', methods=['GET'])
+@movies_bp.route('/api/movies', methods=['GET'])
 def search_movies():
-    # Get query parameters from the URL
     title = request.args.get('title')
     genre = request.args.get('genre')
     year_start = request.args.get('year_start', 1900)
     year_end = request.args.get('year_end', 2026)
-    # If limit isn't in the URL, it stays None
     limit = request.args.get('limit')
     if limit is not None:
         limit = int(limit)
@@ -133,8 +115,6 @@ def search_movies():
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # Base Query
-        # We use Subqueries for ratings to calculate the AVG before filtering
         query = """
             SELECT DISTINCT m.movie_id, m.title, m.release_year, m.runtime,
                    r_stats.avg_rating
@@ -144,32 +124,31 @@ def search_movies():
             LEFT JOIN Movie_Crew mc ON m.movie_id = mc.movie_id
             LEFT JOIN Crew c ON mc.crew_id = c.crew_id
             LEFT JOIN (
-                SELECT movie_id, AVG(rating) as avg_rating 
-                FROM Rating 
+                SELECT movie_id, AVG(rating) as avg_rating
+                FROM Rating
                 GROUP BY movie_id
             ) r_stats ON m.movie_id = r_stats.movie_id
         """
-        
+
         query += " WHERE m.release_year BETWEEN %s AND %s"
         params = [year_start, year_end]
 
-        # Dynamic Filters
         if title:
             query += " AND m.title ILIKE %s"
             params.append(f"%{title}%")
-        
+
         if genre:
             query += " AND g.name = %s"
             params.append(genre)
 
         if tag:
             query += """ AND EXISTS (
-                SELECT 1 FROM User_Movie_Tag umt 
-                JOIN Tag t ON umt.tag_id = t.tag_id 
+                SELECT 1 FROM User_Movie_Tag umt
+                JOIN Tag t ON umt.tag_id = t.tag_id
                 WHERE umt.movie_id = m.movie_id AND t.tag_text ILIKE %s
             )"""
             params.append(f"%{tag}%")
-        
+
         if crew_name:
             query += " AND c.name ILIKE %s"
             params.append(f"%{crew_name}%")
@@ -177,18 +156,17 @@ def search_movies():
         if min_rating:
             query += " AND r_stats.avg_rating >= %s"
             params.append(float(min_rating))
-        
+
         if max_rating:
             query += " AND r_stats.avg_rating <= %s"
             params.append(float(max_rating))
 
-        # Pagination & Sorting
         query += " ORDER BY m.release_year DESC"
-        
+
         if limit is not None:
             query += " LIMIT %s"
             params.append(limit)
-            
+
         query += " OFFSET %s"
         params.append(offset)
 
@@ -197,15 +175,11 @@ def search_movies():
 
         return jsonify({
             "count": len(movies),
-            "results": movies
+            "results": [dict(m) for m in movies]
         })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
-        if conn: conn.close()
-
-
-
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+        if conn:
+            conn.close()

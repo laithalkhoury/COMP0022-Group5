@@ -6,6 +6,7 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+# Requirement 6: User accounts (login, register)
 auth_bp = Blueprint('auth', __name__)
 
 def get_db_connection():
