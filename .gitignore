@@ -1,1 +1,15 @@
 .env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Frontend Folder
+# Node
+frontend/node_modules/
+frontend/dist/
+
+frontend/spec.md
+.claude
+dataset/
