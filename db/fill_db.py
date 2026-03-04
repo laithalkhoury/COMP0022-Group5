@@ -7,8 +7,37 @@ import ast
 import re
 from psycopg2.extras import execute_values
 
-# Load environment variables
-load_dotenv()
+def load_environment():
+    """Load env vars from .env or the legacy `dotenv` file.
+
+    We avoid the default load_dotenv() call because python-dotenv 1.1.0 raises
+    an AssertionError in some contexts (e.g., Python 3.13 REPL). Instead we
+    explicitly point to candidate files:
+      1) .env in the current working directory
+      2) .env alongside this script
+      3) the legacy `dotenv` filename in this repo
+    """
+
+    loaded = False
+
+    candidates = [
+        Path.cwd() / ".env", # .env from the directory you run in
+        Path(__file__).resolve().parent.parent / ".env",    # .env in the project root (one level up)
+        Path(__file__).with_name(".env"), # .env next to the script
+        Path(__file__).with_name("dotenv"), # legacy filename
+    ]
+
+    for path in candidates:
+        if path.exists():
+            loaded = load_dotenv(dotenv_path=path, override=True) or loaded
+
+    if not loaded:
+        raise RuntimeError(
+            "No environment file found. Add DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, FOLDER_PATH to .env or dotenv."
+        )
+
+
+load_environment()
 
 # Database connection parameters
 DB_PARAMS = {
