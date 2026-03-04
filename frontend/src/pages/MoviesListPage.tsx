@@ -44,7 +44,7 @@ export default function MoviesListPage() {
             const params: MovieQueryParams = {
                 ...currentParams,
                 page: currentParams.page ?? 1,
-                size: 10,
+                size: 20,
             };
             const data = await getMovies(params);
             setMovies(data);
@@ -63,9 +63,7 @@ export default function MoviesListPage() {
     useEffect(() => {
         if (!loading && movies && !hasRestoredScroll.current) {
             hasRestoredScroll.current = true;
-            requestAnimationFrame(() => {
-                restoreScroll(scrollKey);
-            });
+            requestAnimationFrame(() => restoreScroll(scrollKey));
         }
     }, [loading, movies, scrollKey]);
 
@@ -74,9 +72,7 @@ export default function MoviesListPage() {
         let timeout: ReturnType<typeof setTimeout>;
         function handleScroll() {
             clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                saveScroll(scrollKey);
-            }, 150);
+            timeout = setTimeout(() => saveScroll(scrollKey), 150);
         }
         window.addEventListener('scroll', handleScroll);
         return () => {
@@ -86,16 +82,33 @@ export default function MoviesListPage() {
     }, [scrollKey]);
 
     function handleSearch(params: MovieQueryParams) {
-        const qs = paramsToSearch({ ...params, page: 1, size: 10 });
+        const qs = paramsToSearch({ ...params, page: 1, size: 20 });
         navigate(`/movies${qs ? `?${qs}` : ''}`);
     }
 
     function handlePageChange(newPage: number) {
-        const qs = paramsToSearch({ ...currentParams, page: newPage, size: 10 });
+        const qs = paramsToSearch({ ...currentParams, page: newPage, size: 20 });
         navigate(`/movies${qs ? `?${qs}` : ''}`);
     }
 
     const page = currentParams.page ?? 1;
+
+    // Build a human-readable summary of active filters
+    const activeFilterLabels: string[] = [];
+    if (currentParams.title) activeFilterLabels.push(`title: "${currentParams.title}"`);
+    if (currentParams.crew) activeFilterLabels.push(`crew: "${currentParams.crew}"`);
+    if (currentParams.genres?.length) activeFilterLabels.push(currentParams.genres.join(', '));
+    if (currentParams.tag) activeFilterLabels.push(`tag: #${currentParams.tag}`);
+    if (currentParams.dateFrom || currentParams.dateTo) {
+        const from = currentParams.dateFrom?.substring(0, 4) ?? '…';
+        const to = currentParams.dateTo?.substring(0, 4) ?? '…';
+        activeFilterLabels.push(`${from}–${to}`);
+    }
+    if (currentParams.ratingMin != null || currentParams.ratingMax != null) {
+        const lo = currentParams.ratingMin ?? 0;
+        const hi = currentParams.ratingMax ?? 5;
+        activeFilterLabels.push(`rating ${lo}–${hi}`);
+    }
 
     return (
         <div>
@@ -105,9 +118,30 @@ export default function MoviesListPage() {
                 onSearch={handleSearch}
             />
 
-            <div className="mt-6 space-y-4">
-                {loading &&
-                    Array.from({ length: 5 }, (_, i) => <CardSkeleton key={i} />)}
+            {/* Results summary bar */}
+            {!loading && movies && (
+                <div className="mt-4 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                    <span>
+                        {movies.total === 0
+                            ? 'No results'
+                            : `Showing ${(page - 1) * 20 + 1}–${Math.min(page * 20, (page - 1) * 20 + movies.items.length)} results`}
+                    </span>
+                    {activeFilterLabels.length > 0 && (
+                        <>
+                            <span className="text-gray-300 dark:text-gray-600">·</span>
+                            <span className="truncate">
+                                Filtered by{' '}
+                                <span className="font-medium text-gray-700 dark:text-gray-300">
+                                    {activeFilterLabels.join(' · ')}
+                                </span>
+                            </span>
+                        </>
+                    )}
+                </div>
+            )}
+
+            <div className="mt-4 space-y-3">
+                {loading && Array.from({ length: 6 }, (_, i) => <CardSkeleton key={i} />)}
 
                 {error && <ErrorPanel message={error} onRetry={fetchMovies} />}
 
@@ -135,7 +169,7 @@ export default function MoviesListPage() {
 
             {toastVisible && (
                 <Toast
-                    message="Planner coming soon. Please login to manage lists."
+                    message="Collection planner coming soon — stay tuned."
                     onClose={() => setToastVisible(false)}
                 />
             )}

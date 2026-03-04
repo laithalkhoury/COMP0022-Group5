@@ -7,16 +7,15 @@ interface FiltersBarProps {
     onSearch: (params: MovieQueryParams) => void;
 }
 
-const SORT_OPTIONS: { value: MovieQueryParams['sortBy']; label: string }[] = [
-    { value: 'rating', label: 'Rating' },
-    { value: 'year', label: 'Year' },
+const SORT_OPTIONS: { value: NonNullable<MovieQueryParams['sortBy']>; label: string }[] = [
+    { value: 'rating', label: 'Avg Rating' },
+    { value: 'year', label: 'Release Year' },
     { value: 'popularity', label: 'Popularity' },
-    { value: 'boxOffice', label: 'Box Office' },
-    { value: 'criticScore', label: 'Critic Score' },
 ];
 
 export default function FiltersBar({ filterOptions, initialValues, onSearch }: FiltersBarProps) {
     const [title, setTitle] = useState(initialValues.title ?? '');
+    const [crew, setCrew] = useState(initialValues.crew ?? '');
     const [dateFrom, setDateFrom] = useState(initialValues.dateFrom ?? '');
     const [dateTo, setDateTo] = useState(initialValues.dateTo ?? '');
     const [genres, setGenres] = useState<string[]>(initialValues.genres ?? []);
@@ -35,6 +34,7 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
     // Sync from URL when back/forward navigation occurs
     useEffect(() => {
         setTitle(initialValues.title ?? '');
+        setCrew(initialValues.crew ?? '');
         setDateFrom(initialValues.dateFrom ?? '');
         setDateTo(initialValues.dateTo ?? '');
         setGenres(initialValues.genres ?? []);
@@ -71,6 +71,7 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
     function handleSearch() {
         onSearch({
             title: title || undefined,
+            crew: crew || undefined,
             dateFrom: dateFrom || undefined,
             dateTo: dateTo || undefined,
             genres: genres.length ? genres : undefined,
@@ -84,21 +85,36 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
         });
     }
 
+    function handleReset() {
+        setTitle('');
+        setCrew('');
+        setDateFrom('');
+        setDateTo('');
+        setGenres([]);
+        setTag('');
+        setRatingMin('');
+        setRatingMax('');
+        setSortBy('rating');
+        setSortDir('desc');
+        onSearch({ page: 1, size: 10 });
+    }
+
     function handleKeyDown(e: React.KeyboardEvent) {
-        if (e.key === 'Enter') {
-            handleSearch();
-        }
+        if (e.key === 'Enter') handleSearch();
     }
 
     const inputClass =
         'w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500';
 
+    const hasActiveFilters =
+        title || crew || dateFrom || dateTo || genres.length || tag || ratingMin || ratingMax;
+
     return (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-5 shadow-sm space-y-4">
-            {/* Row 1: Title + Date range */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 shadow-sm space-y-4">
+            {/* Row 1: Title + Director/Actor + Date range */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
                         Title
                     </label>
                     <input
@@ -106,13 +122,28 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="Search by title..."
+                        placeholder="Search by title…"
                         className={inputClass}
                     />
                 </div>
+
                 <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                        From
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                        Director / Actor
+                    </label>
+                    <input
+                        type="text"
+                        value={crew}
+                        onChange={(e) => setCrew(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="e.g. Spielberg, DiCaprio…"
+                        className={inputClass}
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                        Released From
                     </label>
                     <input
                         type="date"
@@ -121,9 +152,10 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                         className={inputClass}
                     />
                 </div>
+
                 <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                        To
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                        Released To
                     </label>
                     <input
                         type="date"
@@ -134,10 +166,10 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                 </div>
             </div>
 
-            {/* Row 2: Genres chips */}
+            {/* Row 2: Genre chips */}
             {filterOptions && filterOptions.genres.length > 0 && (
                 <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                         Genres
                     </label>
                     <div className="flex flex-wrap gap-2">
@@ -148,8 +180,8 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                                 onClick={() => toggleGenre(g)}
                                 className={`px-3 py-1 text-xs rounded-full border transition-colors ${
                                     genres.includes(g)
-                                        ? 'bg-blue-600 text-white border-blue-600'
-                                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400'
+                                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400 hover:text-blue-600'
                                 }`}
                             >
                                 {g}
@@ -159,11 +191,11 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                 </div>
             )}
 
-            {/* Row 3: Tag + Rating + Sort */}
+            {/* Row 3: Tag + Rating + Sort + Actions */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 {/* Tag with typeahead */}
                 <div ref={tagWrapperRef} className="relative">
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
                         Tag
                     </label>
                     <input
@@ -175,7 +207,7 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                         }}
                         onFocus={() => setTagDropdownOpen(true)}
                         onKeyDown={handleKeyDown}
-                        placeholder="e.g. neo-noir"
+                        placeholder="e.g. neo-noir…"
                         className={inputClass}
                     />
                     {tagDropdownOpen && filteredTags.length > 0 && (
@@ -202,7 +234,7 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                 {/* Rating range */}
                 <div className="flex gap-2">
                     <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
                             Min Rating
                         </label>
                         <input
@@ -212,11 +244,12 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                             step="0.5"
                             value={ratingMin}
                             onChange={(e) => setRatingMin(e.target.value)}
+                            placeholder="0"
                             className={inputClass}
                         />
                     </div>
                     <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
                             Max Rating
                         </label>
                         <input
@@ -226,6 +259,7 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                             step="0.5"
                             value={ratingMax}
                             onChange={(e) => setRatingMax(e.target.value)}
+                            placeholder="5"
                             className={inputClass}
                         />
                     </div>
@@ -234,7 +268,7 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                 {/* Sort */}
                 <div className="flex gap-2">
                     <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
                             Sort By
                         </label>
                         <select
@@ -252,8 +286,8 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                         </select>
                     </div>
                     <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                            Direction
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                            Order
                         </label>
                         <select
                             value={sortDir}
@@ -268,12 +302,21 @@ export default function FiltersBar({ filterOptions, initialValues, onSearch }: F
                     </div>
                 </div>
 
-                {/* Search button */}
-                <div>
+                {/* Action buttons */}
+                <div className="flex gap-2">
+                    {hasActiveFilters && (
+                        <button
+                            type="button"
+                            onClick={handleReset}
+                            className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        >
+                            Reset
+                        </button>
+                    )}
                     <button
                         type="button"
                         onClick={handleSearch}
-                        className="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
+                        className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm"
                     >
                         Search
                     </button>

@@ -1,15 +1,30 @@
 import os
-from dotenv import load_dotenv
+import requests as http_requests
+from flask import Blueprint, jsonify, request, redirect
+from db import get_db_connection
 
-load_dotenv() 
+movies_bp = Blueprint('movies', __name__)
 
-from flask import Flask, jsonify, request
-from flask_cors import CORS
-from auth import auth_bp 
+TMDB_API_KEY = os.getenv('TMDB_API_KEY', '')
 
-app = Flask(__name__)
-CORS(app)
-app.register_blueprint(auth_bp) 
+@movies_bp.route('/api/movies/poster/<int:tmdb_id>', methods=['GET'])
+def get_movie_poster(tmdb_id):
+    if not TMDB_API_KEY:
+        return jsonify({"error": "TMDB_API_KEY not configured"}), 404
+    try:
+        resp = http_requests.get(
+            f"https://api.themoviedb.org/3/movie/{tmdb_id}",
+            params={"api_key": TMDB_API_KEY, "language": "en-US"},
+            timeout=5
+        )
+        data = resp.json()
+        poster_path = data.get("poster_path")
+        if not poster_path:
+            return jsonify({"error": "No poster available"}), 404
+        return redirect(f"https://image.tmdb.org/t/p/w200{poster_path}")
+    except Exception:
+        return jsonify({"error": "Failed to fetch poster"}), 502
+
 
 @movies_bp.route('/api/movies/<int:movie_id>', methods=['GET'])
 def get_movie_details(movie_id):
@@ -19,7 +34,7 @@ def get_movie_details(movie_id):
         cur = conn.cursor()
 
         # Get Core Movie Details
-        movie_query = "SELECT movie_id, title, release_year, runtime FROM Movie WHERE movie_id = %s"
+        movie_query = "SELECT movie_id, title, release_year, runtime, tmdb_id FROM Movie WHERE movie_id = %s"
         cur.execute(movie_query, (movie_id,))
         movie = cur.fetchone()
 
@@ -73,6 +88,7 @@ def get_movie_details(movie_id):
             "title": movie['title'],
             "release_year": movie['release_year'],
             "runtime": movie['runtime'],
+            "tmdb_id": movie['tmdb_id'],
             "genres": genres,
             "average_rating": float(rating_stats['avg_rating']) if rating_stats['avg_rating'] else 0.0,
             "rating_count": rating_stats['num_ratings'],
@@ -115,66 +131,81 @@ def search_movies():
         conn = get_db_connection()
         cur = conn.cursor()
 
-        query = """
-            SELECT DISTINCT m.movie_id, m.title, m.release_year, m.runtime,
-                   r_stats.avg_rating
+        # Build WHERE conditions
+        where_clauses = ["m.release_year BETWEEN %s AND %s"]
+        params = [year_start, year_end]
+
+        if title:
+            where_clauses.append("m.title ILIKE %s")
+            params.append(f"%{title}%")
+
+        if genre:
+            where_clauses.append("EXISTS (SELECT 1 FROM Movie_Genre mg2 JOIN Genre g2 ON mg2.genre_id = g2.genre_id WHERE mg2.movie_id = m.movie_id AND g2.name = %s)")
+            params.append(genre)
+
+        if tag:
+            where_clauses.append("""EXISTS (
+                SELECT 1 FROM User_Movie_Tag umt
+                JOIN Tag t ON umt.tag_id = t.tag_id
+                WHERE umt.movie_id = m.movie_id AND t.tag_text ILIKE %s
+            )""")
+            params.append(f"%{tag}%")
+
+        if crew_name:
+            where_clauses.append("EXISTS (SELECT 1 FROM Movie_Crew mc2 JOIN Crew c2 ON mc2.crew_id = c2.crew_id WHERE mc2.movie_id = m.movie_id AND c2.name ILIKE %s)")
+            params.append(f"%{crew_name}%")
+
+        if min_rating:
+            where_clauses.append("r_stats.avg_rating >= %s")
+            params.append(float(min_rating))
+
+        if max_rating:
+            where_clauses.append("r_stats.avg_rating <= %s")
+            params.append(float(max_rating))
+
+        where_sql = " AND ".join(where_clauses)
+
+        joins = """
             FROM Movie m
-            LEFT JOIN Movie_Genre mg ON m.movie_id = mg.movie_id
-            LEFT JOIN Genre g ON mg.genre_id = g.genre_id
-            LEFT JOIN Movie_Crew mc ON m.movie_id = mc.movie_id
-            LEFT JOIN Crew c ON mc.crew_id = c.crew_id
             LEFT JOIN (
                 SELECT movie_id, AVG(rating) as avg_rating
                 FROM Rating
                 GROUP BY movie_id
             ) r_stats ON m.movie_id = r_stats.movie_id
+            LEFT JOIN Movie_Genre mg ON m.movie_id = mg.movie_id
+            LEFT JOIN Genre g ON mg.genre_id = g.genre_id
         """
 
-        query += " WHERE m.release_year BETWEEN %s AND %s"
-        params = [year_start, year_end]
+        # Get total count (distinct movies)
+        cur.execute(f"SELECT COUNT(DISTINCT m.movie_id) as total {joins} WHERE {where_sql}", tuple(params))
+        total = cur.fetchone()['total']
 
-        if title:
-            query += " AND m.title ILIKE %s"
-            params.append(f"%{title}%")
+        # Get paginated results with genres aggregated
+        data_query = f"""
+            SELECT m.movie_id, m.title, m.release_year, m.runtime, m.tmdb_id,
+                   r_stats.avg_rating,
+                   COALESCE(
+                       ARRAY_AGG(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL),
+                       ARRAY[]::text[]
+                   ) as genres
+            {joins}
+            WHERE {where_sql}
+            GROUP BY m.movie_id, m.title, m.release_year, m.runtime, m.tmdb_id, r_stats.avg_rating
+            ORDER BY m.release_year DESC
+        """
 
-        if genre:
-            query += " AND g.name = %s"
-            params.append(genre)
-
-        if tag:
-            query += """ AND EXISTS (
-                SELECT 1 FROM User_Movie_Tag umt
-                JOIN Tag t ON umt.tag_id = t.tag_id
-                WHERE umt.movie_id = m.movie_id AND t.tag_text ILIKE %s
-            )"""
-            params.append(f"%{tag}%")
-
-        if crew_name:
-            query += " AND c.name ILIKE %s"
-            params.append(f"%{crew_name}%")
-
-        if min_rating:
-            query += " AND r_stats.avg_rating >= %s"
-            params.append(float(min_rating))
-
-        if max_rating:
-            query += " AND r_stats.avg_rating <= %s"
-            params.append(float(max_rating))
-
-        query += " ORDER BY m.release_year DESC"
-
+        data_params = list(params)
         if limit is not None:
-            query += " LIMIT %s"
-            params.append(limit)
+            data_query += " LIMIT %s"
+            data_params.append(limit)
+        data_query += " OFFSET %s"
+        data_params.append(offset)
 
-        query += " OFFSET %s"
-        params.append(offset)
-
-        cur.execute(query, tuple(params))
+        cur.execute(data_query, tuple(data_params))
         movies = cur.fetchall()
 
         return jsonify({
-            "count": len(movies),
+            "count": total,
             "results": [dict(m) for m in movies]
         })
 
