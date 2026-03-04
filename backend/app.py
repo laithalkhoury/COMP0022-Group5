@@ -4,6 +4,7 @@ from flask import Flask
 from flask_cors import CORS
 
 from routes.movies import movies_bp
+from routes.filters import filters_bp
 from routes.reports import reports_bp
 from routes.predictions import predictions_bp
 from routes.personality import personality_bp
@@ -16,6 +17,7 @@ app = Flask(__name__)
 CORS(app)
 
 app.register_blueprint(movies_bp)
+app.register_blueprint(filters_bp)
 app.register_blueprint(reports_bp)
 app.register_blueprint(predictions_bp)
 app.register_blueprint(personality_bp)

@@ -7,6 +7,13 @@ export interface MovieSummary {
     avgRating: number | null;
     ratingCount: number | null;
     genres: string[];
+    runtime: number | null;
+}
+
+export interface CrewMember {
+    name: string;
+    role: string;
+    character: string | null;
 }
 
 export interface MovieDetail extends MovieSummary {
@@ -16,6 +23,7 @@ export interface MovieDetail extends MovieSummary {
     awards: string[] | null;
     boxOffice: string | number | null;
     criticScore: number | null;
+    crew: CrewMember[];
 }
 
 export interface FilterOptions {
@@ -38,9 +46,10 @@ export interface MovieQueryParams {
     dateTo?: string;
     genres?: string[];
     tag?: string;
+    crew?: string;
     ratingMin?: number;
     ratingMax?: number;
-    sortBy?: 'rating' | 'year' | 'popularity' | 'boxOffice' | 'criticScore';
+    sortBy?: 'rating' | 'year' | 'popularity';
     sortDir?: 'asc' | 'desc';
     page?: number;
     size?: number;

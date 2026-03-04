@@ -70,21 +70,23 @@ def run_movie_etl():
 
     # STEP 1: Populate Movie
     print("Mapping Links and populating Movie table...")
-    links = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/links.csv').dropna(subset=['imdbId'])
+    dataset_dir = os.getenv('FOLDER_PATH', '/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/ml-latest-small')
+    links = pd.read_csv(f'{dataset_dir}/links.csv').dropna(subset=['imdbId'])
     valid_movie_ids = set(links['imdbId'].astype(int))
-    
-    movies_df = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/movies.csv')
+
+    movies_df = pd.read_csv(f'{dataset_dir}/movies.csv')
     movies_merged = movies_df.merge(links, on='movieId')
+
+    runtime_map = {}  # no runtime source available; defaults to 90
 
     for _, row in movies_merged.iterrows():
         imdb_id = int(row['imdbId'])
         raw_title = row['title']
-        
+
         year = extract_year(raw_title)
         title = clean_title(raw_title)
         # Check if runtime exists in our map, otherwise default to 0 or 90
-        runtime = runtime_map.get(imdb_id, 90) 
-        
+        runtime = runtime_map.get(imdb_id, 90)
         # Insert Movie
         cur.execute(
             """INSERT INTO Movie (movie_id, title, release_year, runtime) 
@@ -123,7 +125,7 @@ def run_movie_etl():
     referenced_crew_ids = set()
     filtered_roles_storage = [] # To avoid reading the file again
 
-    roles_iter = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/roles.tsv', sep='\t', chunksize=100000)
+    roles_iter = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/title.principals.tsv', sep='\t', chunksize=100000)
     for chunk in roles_iter:
         chunk['t_int'] = chunk['tconst'].apply(clean_id)
         chunk['n_int'] = chunk['nconst'].apply(clean_id)
@@ -144,7 +146,7 @@ def run_movie_etl():
 
     # Populate Crew
     print(f"Populating Crew table with {len(referenced_crew_ids)} unique people...")
-    names_iter = pd.read_csv('/Users/umarali/Documents/Databases Datasets/Full Datasets/names.tsv', sep='\t', chunksize=100000)
+    names_iter = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/name.basics.tsv', sep='\t', chunksize=100000)
     for chunk in names_iter:
         chunk['n_int'] = chunk['nconst'].apply(clean_id)
         needed_names = chunk[chunk['n_int'].isin(referenced_crew_ids)]
@@ -498,4 +500,10 @@ def run_personality_etl():
 
 
 if __name__ == "__main__":
-    run_etl()
+    run_movie_etl()
+    run_ml_user_etl()
+    run_personality_etl()
+    run_tag_etl()
+    run_rating_etl()
+    run_user_movie_tag_etl()
+    print("Full ETL complete! Integrity maintained.")

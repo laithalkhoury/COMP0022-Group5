@@ -3,6 +3,7 @@ import type { MovieQueryParams } from '@/types/dto';
 export function paramsToSearch(params: MovieQueryParams): string {
     const usp = new URLSearchParams();
     if (params.title) usp.set('title', params.title);
+    if (params.crew) usp.set('crew', params.crew);
     if (params.dateFrom) usp.set('dateFrom', params.dateFrom);
     if (params.dateTo) usp.set('dateTo', params.dateTo);
     if (params.tag) usp.set('tag', params.tag);
@@ -22,6 +23,7 @@ export function searchToParams(usp: URLSearchParams): MovieQueryParams {
     const genres = usp.getAll('genres');
     return {
         title: usp.get('title') ?? undefined,
+        crew: usp.get('crew') ?? undefined,
         dateFrom: usp.get('dateFrom') ?? undefined,
         dateTo: usp.get('dateTo') ?? undefined,
         tag: usp.get('tag') ?? undefined,
