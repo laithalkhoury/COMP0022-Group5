@@ -32,6 +32,10 @@ def load_environment():
             loaded = load_dotenv(dotenv_path=path, override=True) or loaded
 
     if not loaded:
+        # In Docker, env vars are injected directly — no .env file needed
+        required = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'FOLDER_PATH']
+        if all(os.getenv(v) for v in required):
+            return
         raise RuntimeError(
             "No environment file found. Add DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, FOLDER_PATH to .env or dotenv."
         )
@@ -360,6 +364,8 @@ def run_rating_etl():
     for chunk in ratings_iter:
         chunk["imdb_id"] = chunk["movieId"].map(ml_to_imdb)
         chunk = chunk.dropna(subset=["userId", "imdb_id", "rating", "timestamp"])
+        # Keep only the latest rating per (userId, movieId) within each chunk
+        chunk = chunk.sort_values("timestamp").drop_duplicates(subset=["userId", "imdb_id"], keep="last")
 
         # epoch seconds -> naive datetime (UTC)
         rated_at = pd.to_datetime(chunk["timestamp"], unit="s", utc=True).dt.tz_convert(None)

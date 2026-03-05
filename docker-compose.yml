@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16
+    image: postgres:17
     env_file: .env
     environment:
       POSTGRES_DB: ${DB_NAME}
@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./db/dump.sql:/docker-entrypoint-initdb.d/01-dump.sql
     ports:
       - "5432:5432"
     healthcheck:
