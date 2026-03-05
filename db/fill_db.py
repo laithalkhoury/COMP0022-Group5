@@ -99,11 +99,10 @@ def run_movie_etl():
 
     # STEP 1: Populate Movie
     print("Mapping Links and populating Movie table...")
-    dataset_dir = os.getenv('FOLDER_PATH', '/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/ml-latest-small')
-    links = pd.read_csv(f'{dataset_dir}/links.csv').dropna(subset=['imdbId'])
+    links = pd.read_csv(f'{FOLDER_PATH}/links.csv').dropna(subset=['imdbId'])
     valid_movie_ids = set(links['imdbId'].astype(int))
 
-    movies_df = pd.read_csv(f'{dataset_dir}/movies.csv')
+    movies_df = pd.read_csv(f'{FOLDER_PATH}/movies.csv')
     movies_merged = movies_df.merge(links, on='movieId')
 
     runtime_map = {}  # no runtime source available; defaults to 90
@@ -116,11 +115,12 @@ def run_movie_etl():
         title = clean_title(raw_title)
         # Check if runtime exists in our map, otherwise default to 0 or 90
         runtime = runtime_map.get(imdb_id, 90)
+        tmdb_id = int(row['tmdbId']) if pd.notna(row.get('tmdbId')) else None
         # Insert Movie
         cur.execute(
-            """INSERT INTO Movie (movie_id, title, release_year, runtime) 
-               VALUES (%s, %s, %s, %s) ON CONFLICT (movie_id) DO NOTHING""",
-            (imdb_id, title, year if year else 0, runtime)
+            """INSERT INTO Movie (movie_id, title, release_year, runtime, tmdb_id)
+               VALUES (%s, %s, %s, %s, %s) ON CONFLICT (movie_id) DO UPDATE SET tmdb_id = EXCLUDED.tmdb_id""",
+            (imdb_id, title, year if year else 0, runtime, tmdb_id)
         )
 
         # Handle Genres
@@ -154,7 +154,7 @@ def run_movie_etl():
     referenced_crew_ids = set()
     filtered_roles_storage = [] # To avoid reading the file again
 
-    roles_iter = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/title.principals.tsv', sep='\t', chunksize=100000)
+    roles_iter = pd.read_csv(f'{FOLDER_PATH}/title.principals.tsv', sep='\t', chunksize=100000)
     for chunk in roles_iter:
         chunk['t_int'] = chunk['tconst'].apply(clean_id)
         chunk['n_int'] = chunk['nconst'].apply(clean_id)
@@ -175,7 +175,7 @@ def run_movie_etl():
 
     # Populate Crew
     print(f"Populating Crew table with {len(referenced_crew_ids)} unique people...")
-    names_iter = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/name.basics.tsv', sep='\t', chunksize=100000)
+    names_iter = pd.read_csv(f'{FOLDER_PATH}/name.basics.tsv', sep='\t', chunksize=100000)
     for chunk in names_iter:
         chunk['n_int'] = chunk['nconst'].apply(clean_id)
         needed_names = chunk[chunk['n_int'].isin(referenced_crew_ids)]
@@ -242,7 +242,7 @@ def run_personality_etl():
     cur = conn.cursor()
 
     print("Populating person_user and person_user_recommendation tables...")
-    df = pd.read_csv(FOLDER_PATH+'personality-data.csv')
+    df = pd.read_csv(f'{FOLDER_PATH}/personality-data.csv')
     df.columns = df.columns.str.strip()
 
     # Pre-load valid movie IDs to avoid FK violations
@@ -468,64 +468,6 @@ def run_user_movie_tag_etl():
 
     print(f"User_Movie_Tag ETL complete! Attempted inserts: {total_inserts}.")
 
-
-
-def run_ml_user_etl():
-    conn = psycopg2.connect(**DB_PARAMS)
-    cur = conn.cursor()
-
-    print("Populating ML_User table...")
-    ratings = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/ml-latest-small/ratings.csv')
-    unique_users = ratings['userId'].unique()
-
-    for user_id in unique_users:
-        cur.execute(
-            "INSERT INTO ML_User (ml_user_id) VALUES (%s) ON CONFLICT DO NOTHING",
-            (int(user_id),)
-        )
-
-    conn.commit()
-    cur.close()
-    conn.close()
-    print(f"ML_User ETL complete! {len(unique_users)} users inserted.")
-
-
-def run_personality_etl():
-    conn = psycopg2.connect(**DB_PARAMS)
-    cur = conn.cursor()
-
-    print("Populating person_user and person_user_recommendation tables...")
-    df = pd.read_csv('/Users/laithkhoury/Desktop/UCL/Coursework/Databases/Coursework/personality-isf2018/personality-data.csv')
-    df.columns = df.columns.str.strip()
-
-    # Pre-load valid movie IDs to avoid FK violations
-    cur.execute("SELECT movie_id FROM Movie")
-    valid_movie_ids = {row[0] for row in cur.fetchall()}
-
-    for _, row in df.iterrows():
-        cur.execute(
-            """INSERT INTO person_user
-               (person_user_id, assigned_metric, assigned_condition, openness, agreeableness, extraversion, conscientiousness, emotional_stability)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING""",
-            (row['userid'].strip(), row['assigned metric'].strip(), row['assigned condition'].strip(),
-             row['openness'], row['agreeableness'], row['extraversion'],
-             row['conscientiousness'], row['emotional_stability'])
-        )
-
-        for rank in range(1, 13):
-            movie_id = row[f'movie_{rank}']
-            predicted_rating = row[f'predicted_rating_{rank}']
-            if pd.notna(movie_id) and pd.notna(predicted_rating) and int(movie_id) in valid_movie_ids:
-                cur.execute(
-                    """INSERT INTO person_user_recommendation (person_user_id, rank_position, movie_id, predicted_rating)
-                       VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING""",
-                    (row['userid'].strip(), rank, int(movie_id), float(predicted_rating))
-                )
-
-    conn.commit()
-    cur.close()
-    conn.close()
-    print("Personality ETL complete!")
 
 
 if __name__ == "__main__":
