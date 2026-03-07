@@ -3,6 +3,15 @@ from db import get_db_connection
 
 movies_bp = Blueprint('movies', __name__)
 
+from flask import Flask, jsonify, request, Blueprint
+from flask_cors import CORS
+from .auth import auth_bp
+
+app = Flask(__name__)
+CORS(app)
+app.register_blueprint(auth_bp) 
+
+movies_bp = Blueprint('movies', __name__)
 
 @movies_bp.route('/api/movies/<int:movie_id>', methods=['GET'])
 def get_movie_details(movie_id):
