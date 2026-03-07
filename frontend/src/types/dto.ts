@@ -54,3 +54,23 @@ export interface MovieQueryParams {
     page?: number;
     size?: number;
 }
+
+export interface PredictionRequest {
+    title: string;
+    genres: string[];
+    tags?: string[];
+    release_year: number;
+}
+
+export interface PredictionResponse {
+    title: string;
+    mean: number;
+    uncertainty: number;
+    sample_size: number;
+    confidence: 'High' | 'Moderate' | 'Low';
+    message?: string;
+    top_peers: {
+        title: string;
+        poster_url: string | null;
+    }[];
+}
