@@ -14,3 +14,4 @@ frontend/.env.local
 frontend/spec.md
 .claude
 dataset/
+db/data
