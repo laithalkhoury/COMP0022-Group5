@@ -476,6 +476,44 @@ def run_user_movie_tag_etl():
 
 
 
+def run_poster_etl():
+    """
+    Update Movie.poster_url from poster.csv.
+    CSV columns: tmdbId, imdbId, poster_url
+    """
+    conn = psycopg2.connect(**DB_PARAMS)
+    cur = conn.cursor()
+
+    print("Updating Movie poster_url from poster.csv...")
+
+    poster_iter = pd.read_csv(
+        FOLDER_PATH + "poster.csv",
+        usecols=["imdbId", "poster_url"],
+        chunksize=200_000,
+        low_memory=False
+    )
+
+    total_updates = 0
+
+    for chunk in poster_iter:
+        chunk = chunk.dropna(subset=["imdbId"])
+
+        for _, row in chunk.iterrows():
+            movie_id = int(row["imdbId"])
+            poster_url = row["poster_url"] if pd.notna(row["poster_url"]) else None
+            cur.execute(
+                "UPDATE Movie SET poster_url = %s WHERE movie_id = %s",
+                (poster_url, movie_id)
+            )
+            total_updates += 1
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    print(f"Poster ETL complete! Updated rows: {total_updates}.")
+
+
 if __name__ == "__main__":
     run_movie_etl()
     run_ml_user_etl()
@@ -483,4 +521,5 @@ if __name__ == "__main__":
     run_tag_etl()
     run_rating_etl()
     run_user_movie_tag_etl()
+    run_poster_etl()
     print("Full ETL complete! Integrity maintained.")
