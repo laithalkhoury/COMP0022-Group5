@@ -1,6 +1,4 @@
 import { apiFetch } from './client';
-
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 import type { MovieSummary, MovieDetail, PaginatedResponse, MovieQueryParams, CrewMember } from '@/types/dto';
 
 // ---- Raw backend shapes ----
@@ -12,7 +10,7 @@ interface BackendMovieSummary {
     runtime: number | null;
     avg_rating: number | string | null;
     genres?: string[];
-    tmdb_id?: number | null;
+    poster_url?: string | null;
 }
 
 interface BackendCrewMember {
@@ -26,7 +24,7 @@ interface BackendMovieDetail {
     title: string;
     release_year: number;
     runtime: number | null;
-    tmdb_id?: number | null;
+    poster_url?: string | null;
     genres: string[];
     average_rating: number | string | null;
     rating_count: number | null;
@@ -41,11 +39,6 @@ interface BackendSearchResponse {
 
 // ---- Mappers ----
 
-function posterUrl(tmdb_id?: number | null): string | null {
-    if (!tmdb_id) return null;
-    return `${BASE_URL}/api/movies/poster/${tmdb_id}`;
-}
-
 function toMovieSummary(m: BackendMovieSummary): MovieSummary {
     const avgRating = m.avg_rating != null ? parseFloat(String(m.avg_rating)) : null;
     return {
@@ -53,7 +46,7 @@ function toMovieSummary(m: BackendMovieSummary): MovieSummary {
         title: m.title,
         year: m.release_year,
         releaseDate: String(m.release_year),
-        posterUrl: posterUrl(m.tmdb_id),
+        posterUrl: m.poster_url ?? null,
         avgRating: avgRating != null && !isNaN(avgRating) ? avgRating : null,
         ratingCount: null,
         genres: m.genres ?? [],
@@ -88,7 +81,7 @@ function toMovieDetail(m: BackendMovieDetail): MovieDetail {
         title: m.title,
         year: m.release_year,
         releaseDate: String(m.release_year),
-        posterUrl: posterUrl(m.tmdb_id),
+        posterUrl: m.poster_url ?? null,
         avgRating: avgRating != null && !isNaN(avgRating) ? avgRating : null,
         ratingCount: m.rating_count ?? null,
         genres: m.genres ?? [],

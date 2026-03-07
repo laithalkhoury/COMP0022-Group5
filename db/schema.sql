@@ -7,7 +7,8 @@ CREATE TABLE Movie (
     title TEXT NOT NULL,
     release_year SMALLINT NOT NULL,
     runtime INT CHECK (runtime > 0),
-    tmdb_id INT
+    tmdb_id INT,
+    poster_url TEXT
 );
 
 CREATE TABLE Genre (

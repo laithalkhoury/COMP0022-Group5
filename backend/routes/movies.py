@@ -1,29 +1,7 @@
-import os
-import requests as http_requests
-from flask import Blueprint, jsonify, request, redirect
+from flask import Blueprint, jsonify, request
 from db import get_db_connection
 
 movies_bp = Blueprint('movies', __name__)
-
-TMDB_API_KEY = os.getenv('TMDB_API_KEY', '')
-
-@movies_bp.route('/api/movies/poster/<int:tmdb_id>', methods=['GET'])
-def get_movie_poster(tmdb_id):
-    if not TMDB_API_KEY:
-        return jsonify({"error": "TMDB_API_KEY not configured"}), 404
-    try:
-        resp = http_requests.get(
-            f"https://api.themoviedb.org/3/movie/{tmdb_id}",
-            params={"api_key": TMDB_API_KEY, "language": "en-US"},
-            timeout=5
-        )
-        data = resp.json()
-        poster_path = data.get("poster_path")
-        if not poster_path:
-            return jsonify({"error": "No poster available"}), 404
-        return redirect(f"https://image.tmdb.org/t/p/w200{poster_path}")
-    except Exception:
-        return jsonify({"error": "Failed to fetch poster"}), 502
 
 
 @movies_bp.route('/api/movies/<int:movie_id>', methods=['GET'])
@@ -34,7 +12,7 @@ def get_movie_details(movie_id):
         cur = conn.cursor()
 
         # Get Core Movie Details
-        movie_query = "SELECT movie_id, title, release_year, runtime, tmdb_id FROM Movie WHERE movie_id = %s"
+        movie_query = "SELECT movie_id, title, release_year, runtime, tmdb_id, poster_url FROM Movie WHERE movie_id = %s"
         cur.execute(movie_query, (movie_id,))
         movie = cur.fetchone()
 
@@ -89,6 +67,7 @@ def get_movie_details(movie_id):
             "release_year": movie['release_year'],
             "runtime": movie['runtime'],
             "tmdb_id": movie['tmdb_id'],
+            "poster_url": movie['poster_url'],
             "genres": genres,
             "average_rating": float(rating_stats['avg_rating']) if rating_stats['avg_rating'] else 0.0,
             "rating_count": rating_stats['num_ratings'],
@@ -182,7 +161,7 @@ def search_movies():
 
         # Get paginated results with genres aggregated
         data_query = f"""
-            SELECT m.movie_id, m.title, m.release_year, m.runtime, m.tmdb_id,
+            SELECT m.movie_id, m.title, m.release_year, m.runtime, m.tmdb_id, m.poster_url,
                    r_stats.avg_rating,
                    COALESCE(
                        ARRAY_AGG(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL),
@@ -190,7 +169,7 @@ def search_movies():
                    ) as genres
             {joins}
             WHERE {where_sql}
-            GROUP BY m.movie_id, m.title, m.release_year, m.runtime, m.tmdb_id, r_stats.avg_rating
+            GROUP BY m.movie_id, m.title, m.release_year, m.runtime, m.tmdb_id, m.poster_url, r_stats.avg_rating
             ORDER BY m.release_year DESC
         """
 
