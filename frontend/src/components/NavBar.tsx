@@ -4,6 +4,7 @@ import ThemeToggle from './ThemeToggle';
 const links = [
     { to: '/movies', label: 'Dashboard' },
     { to: '/reports', label: 'Reports' },
+    { to: '/predict', label: 'Predict' },
     { to: '/planner', label: 'Planner' },
     { to: '/login', label: 'Login' },
 ];
