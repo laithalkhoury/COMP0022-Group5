@@ -8,10 +8,10 @@ rating_patterns_bp = Blueprint('rating_patterns', __name__)
 @rating_patterns_bp.route('/api/rating-patterns/scatter', methods=['GET'])
 def scatter_data():
     movie_id = request.args.get('movie_id', type=int)
-    genre = request.args.get('genre')
+    genres = request.args.getlist('genre')
 
-    if not movie_id or not genre:
-        return jsonify({"error": "movie_id and genre are required"}), 400
+    if not movie_id or not genres:
+        return jsonify({"error": "movie_id and at least one genre are required"}), 400
 
     conn = None
     try:
@@ -25,21 +25,28 @@ def scatter_data():
             return jsonify({"error": "Movie not found"}), 404
 
         # For each user who rated the selected movie, get their rating for that movie
-        # and their average rating across all other movies in the selected genre.
-        cur.execute("""
+        # and their average rating across movies that belong to ALL selected genres (AND).
+        # The HAVING clause ensures we only consider movies matching every selected genre.
+        genre_placeholders = ','.join(['%s'] * len(genres))
+        cur.execute(f"""
             SELECT
                 r1.ml_user_id,
                 r1.rating AS movie_rating,
                 AVG(r2.rating) AS genre_avg_rating
             FROM rating r1
             JOIN rating r2 ON r1.ml_user_id = r2.ml_user_id
-            JOIN movie_genre mg ON r2.movie_id = mg.movie_id
-            JOIN genre g ON mg.genre_id = g.genre_id
+            JOIN (
+                SELECT mg.movie_id
+                FROM movie_genre mg
+                JOIN genre g ON mg.genre_id = g.genre_id
+                WHERE g.name IN ({genre_placeholders})
+                GROUP BY mg.movie_id
+                HAVING COUNT(DISTINCT g.name) = %s
+            ) matched_movies ON r2.movie_id = matched_movies.movie_id
             WHERE r1.movie_id = %s
-              AND g.name = %s
               AND r2.movie_id != r1.movie_id
             GROUP BY r1.ml_user_id, r1.rating
-        """, (movie_id, genre))
+        """, (*genres, len(genres), movie_id))
 
         rows = cur.fetchall()
 
@@ -67,7 +74,7 @@ def scatter_data():
 
         return jsonify({
             "movieTitle": movie['title'],
-            "genre": genre,
+            "genres": genres,
             "points": points,
             "count": n,
             "correlation": correlation,

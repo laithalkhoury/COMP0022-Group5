@@ -47,12 +47,14 @@ export default function RatingPatternsPage() {
     const [selectedMovie, setSelectedMovie] = useState<MovieSearchResult | null>(
         null
     );
-    const [showDropdown, setShowDropdown] = useState(false);
+    const [showMovieDropdown, setShowMovieDropdown] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const dropdownRef = useRef<HTMLDivElement>(null);
+    const movieDropdownRef = useRef<HTMLDivElement>(null);
 
-    // Genre
-    const [selectedGenre, setSelectedGenre] = useState('');
+    // Genre multi-select
+    const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+    const [showGenreDropdown, setShowGenreDropdown] = useState(false);
+    const genreDropdownRef = useRef<HTMLDivElement>(null);
 
     // Scatter data
     const [scatterData, setScatterData] = useState<ScatterResponse | null>(null);
@@ -66,14 +68,20 @@ export default function RatingPatternsPage() {
             .finally(() => setLoadingOptions(false));
     }, []);
 
-    // Close dropdown on outside click
+    // Close dropdowns on outside click
     useEffect(() => {
         function handleClick(e: MouseEvent) {
             if (
-                dropdownRef.current &&
-                !dropdownRef.current.contains(e.target as Node)
+                movieDropdownRef.current &&
+                !movieDropdownRef.current.contains(e.target as Node)
             ) {
-                setShowDropdown(false);
+                setShowMovieDropdown(false);
+            }
+            if (
+                genreDropdownRef.current &&
+                !genreDropdownRef.current.contains(e.target as Node)
+            ) {
+                setShowGenreDropdown(false);
             }
         }
         document.addEventListener('mousedown', handleClick);
@@ -89,7 +97,7 @@ export default function RatingPatternsPage() {
 
         if (value.trim().length < 2) {
             setMovieResults([]);
-            setShowDropdown(false);
+            setShowMovieDropdown(false);
             return;
         }
 
@@ -97,7 +105,7 @@ export default function RatingPatternsPage() {
             try {
                 const results = await searchMovies(value.trim());
                 setMovieResults(results);
-                setShowDropdown(results.length > 0);
+                setShowMovieDropdown(results.length > 0);
             } catch {
                 setMovieResults([]);
             }
@@ -108,13 +116,22 @@ export default function RatingPatternsPage() {
     const handleSelectMovie = (movie: MovieSearchResult) => {
         setSelectedMovie(movie);
         setMovieQuery(movie.title);
-        setShowDropdown(false);
+        setShowMovieDropdown(false);
         setMovieResults([]);
+    };
+
+    // Toggle genre selection
+    const toggleGenre = (genre: string) => {
+        setSelectedGenres((prev) =>
+            prev.includes(genre)
+                ? prev.filter((g) => g !== genre)
+                : [...prev, genre]
+        );
     };
 
     // Fetch scatter data when both selections are made
     useEffect(() => {
-        if (!selectedMovie || !selectedGenre) {
+        if (!selectedMovie || selectedGenres.length === 0) {
             setScatterData(null);
             return;
         }
@@ -122,13 +139,17 @@ export default function RatingPatternsPage() {
         setLoading(true);
         setError(null);
 
-        getScatterData(selectedMovie.movieId, selectedGenre)
+        getScatterData(selectedMovie.movieId, selectedGenres)
             .then(setScatterData)
             .catch((err) =>
                 setError(err instanceof Error ? err.message : 'Failed to load data')
             )
             .finally(() => setLoading(false));
-    }, [selectedMovie, selectedGenre]);
+    }, [selectedMovie, selectedGenres]);
+
+    const genreLabel = scatterData
+        ? scatterData.genres.join(' + ')
+        : selectedGenres.join(' + ');
 
     if (loadingOptions) {
         return (
@@ -152,7 +173,7 @@ export default function RatingPatternsPage() {
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Movie typeahead */}
-                    <div className="relative" ref={dropdownRef}>
+                    <div className="relative" ref={movieDropdownRef}>
                         <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
                             Select Movie
                         </label>
@@ -163,7 +184,7 @@ export default function RatingPatternsPage() {
                             placeholder="Type to search, e.g. Toy Story"
                             className="w-full px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
                         />
-                        {showDropdown && movieResults.length > 0 && (
+                        {showMovieDropdown && movieResults.length > 0 && (
                             <ul className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
                                 {movieResults.map((m) => (
                                     <li
@@ -183,23 +204,68 @@ export default function RatingPatternsPage() {
                         )}
                     </div>
 
-                    {/* Genre dropdown */}
-                    <div>
+                    {/* Genre multi-select dropdown */}
+                    <div className="relative" ref={genreDropdownRef}>
                         <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
-                            Select Genre
+                            Select Genres
                         </label>
-                        <select
-                            value={selectedGenre}
-                            onChange={(e) => setSelectedGenre(e.target.value)}
-                            className="w-full px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
+                        <button
+                            type="button"
+                            onClick={() => setShowGenreDropdown((prev) => !prev)}
+                            className="w-full px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none text-left flex items-center justify-between"
                         >
-                            <option value="">-- Choose a genre --</option>
-                            {filterOptions?.genres.map((g) => (
-                                <option key={g} value={g}>
-                                    {g}
-                                </option>
-                            ))}
-                        </select>
+                            <span className={selectedGenres.length === 0 ? 'text-gray-400' : ''}>
+                                {selectedGenres.length === 0
+                                    ? '-- Choose genres --'
+                                    : `${selectedGenres.length} genre${selectedGenres.length > 1 ? 's' : ''} selected`}
+                            </span>
+                            <svg
+                                className={`w-4 h-4 text-gray-400 transition-transform ${showGenreDropdown ? 'rotate-180' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        {showGenreDropdown && (
+                            <ul className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                {filterOptions?.genres.map((g) => (
+                                    <li
+                                        key={g}
+                                        onClick={() => toggleGenre(g)}
+                                        className="px-4 py-2 text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedGenres.includes(g)}
+                                            readOnly
+                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span>{g}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        {selectedGenres.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                                {selectedGenres.map((g) => (
+                                    <span
+                                        key={g}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                    >
+                                        {g}
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleGenre(g)}
+                                            className="hover:text-blue-900 dark:hover:text-blue-200"
+                                        >
+                                            x
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -210,10 +276,10 @@ export default function RatingPatternsPage() {
                     <ErrorPanel
                         message={error}
                         onRetry={() => {
-                            if (selectedMovie && selectedGenre) {
+                            if (selectedMovie && selectedGenres.length > 0) {
                                 setLoading(true);
                                 setError(null);
-                                getScatterData(selectedMovie.movieId, selectedGenre)
+                                getScatterData(selectedMovie.movieId, selectedGenres)
                                     .then(setScatterData)
                                     .catch((err) =>
                                         setError(
@@ -237,7 +303,7 @@ export default function RatingPatternsPage() {
                     </div>
                 )}
 
-                {!loading && !error && selectedMovie && selectedGenre && scatterData && scatterData.count === 0 && (
+                {!loading && !error && selectedMovie && selectedGenres.length > 0 && scatterData && scatterData.count === 0 && (
                     <EmptyState />
                 )}
 
@@ -246,7 +312,7 @@ export default function RatingPatternsPage() {
                         {/* Chart */}
                         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm">
                             <h2 className="text-lg font-bold mb-4">
-                                "{scatterData.movieTitle}" vs {scatterData.genre} Genre
+                                "{scatterData.movieTitle}" vs {genreLabel}
                             </h2>
                             <ResponsiveContainer width="100%" height={450}>
                                 <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 20 }}>
@@ -273,7 +339,7 @@ export default function RatingPatternsPage() {
                                         tick={{ fontSize: 12 }}
                                     >
                                         <Label
-                                            value={`Avg rating in ${scatterData.genre}`}
+                                            value={`Avg rating in ${genreLabel}`}
                                             angle={-90}
                                             position="insideLeft"
                                             offset={0}
@@ -321,7 +387,7 @@ export default function RatingPatternsPage() {
 
                 {!loading && !error && !scatterData && (
                     <div className="py-16 text-center text-gray-400">
-                        Select a movie and a genre to see the scatter plot.
+                        Select a movie and at least one genre to see the scatter plot.
                     </div>
                 )}
             </div>

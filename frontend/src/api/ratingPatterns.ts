@@ -3,11 +3,11 @@ import type { ScatterResponse, MovieSearchResult } from '@/types/dto';
 
 export async function getScatterData(
     movieId: number,
-    genre: string
+    genres: string[]
 ): Promise<ScatterResponse> {
     return apiFetch<ScatterResponse>('/api/rating-patterns/scatter', {
         movie_id: movieId,
-        genre,
+        genre: genres,
     });
 }
 

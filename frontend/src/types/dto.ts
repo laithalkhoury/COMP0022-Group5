@@ -82,7 +82,7 @@ export interface ScatterPoint {
 
 export interface ScatterResponse {
     movieTitle: string;
-    genre: string;
+    genres: string[];
     points: ScatterPoint[];
     count: number;
     correlation: number | null;
