@@ -74,3 +74,22 @@ export interface PredictionResponse {
         poster_url: string | null;
     }[];
 }
+
+export interface ScatterPoint {
+    movieRating: number;
+    genreAvgRating: number;
+}
+
+export interface ScatterResponse {
+    movieTitle: string;
+    genre: string;
+    points: ScatterPoint[];
+    count: number;
+    correlation: number | null;
+}
+
+export interface MovieSearchResult {
+    movieId: number;
+    title: string;
+    year: number;
+}
