@@ -202,6 +202,18 @@ export default function RatingPatternsPage() {
                                 ))}
                             </ul>
                         )}
+                        {selectedMovie && selectedMovie.genres.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                                {selectedMovie.genres.map((g) => (
+                                    <span
+                                        key={g}
+                                        className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                                    >
+                                        {g}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Genre multi-select dropdown */}

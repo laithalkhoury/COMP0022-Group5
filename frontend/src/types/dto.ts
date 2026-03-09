@@ -92,4 +92,5 @@ export interface MovieSearchResult {
     movieId: number;
     title: string;
     year: number;
+    genres: string[];
 }

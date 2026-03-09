@@ -101,15 +101,27 @@ def movie_search():
         cur = conn.cursor()
 
         cur.execute("""
-            SELECT movie_id, title, release_year
-            FROM movie
-            WHERE LOWER(title) LIKE LOWER(%s)
-            ORDER BY title
+            SELECT m.movie_id, m.title, m.release_year,
+                   COALESCE(
+                       ARRAY_AGG(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL),
+                       ARRAY[]::text[]
+                   ) AS genres
+            FROM movie m
+            LEFT JOIN movie_genre mg ON m.movie_id = mg.movie_id
+            LEFT JOIN genre g ON mg.genre_id = g.genre_id
+            WHERE LOWER(m.title) LIKE LOWER(%s)
+            GROUP BY m.movie_id, m.title, m.release_year
+            ORDER BY m.title
             LIMIT %s
         """, (f"%{q}%", limit))
 
         results = [
-            {"movieId": row['movie_id'], "title": row['title'], "year": row['release_year']}
+            {
+                "movieId": row['movie_id'],
+                "title": row['title'],
+                "year": row['release_year'],
+                "genres": row['genres'],
+            }
             for row in cur.fetchall()
         ]
 
