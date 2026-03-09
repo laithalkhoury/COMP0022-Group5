@@ -3,16 +3,6 @@ from db import get_db_connection
 
 movies_bp = Blueprint('movies', __name__)
 
-from flask import Flask, jsonify, request, Blueprint
-from flask_cors import CORS
-from .auth import auth_bp
-
-app = Flask(__name__)
-CORS(app)
-app.register_blueprint(auth_bp) 
-
-movies_bp = Blueprint('movies', __name__)
-
 @movies_bp.route('/api/movies/<int:movie_id>', methods=['GET'])
 def get_movie_details(movie_id):
     conn = None
@@ -102,7 +92,7 @@ def get_movie_details(movie_id):
 @movies_bp.route('/api/movies', methods=['GET'])
 def search_movies():
     title = request.args.get('title')
-    genre = request.args.get('genre')
+    genres = request.args.getlist('genre')
     year_start = request.args.get('year_start', 1900)
     year_end = request.args.get('year_end', 2026)
     limit = request.args.get('limit')
@@ -113,6 +103,8 @@ def search_movies():
     min_rating = request.args.get('min_rating')
     max_rating = request.args.get('max_rating')
     crew_name = request.args.get('crew')
+    sort_by = request.args.get('sort_by', 'year')
+    sort_dir = request.args.get('sort_dir', 'desc')
 
     conn = None
     try:
@@ -127,9 +119,9 @@ def search_movies():
             where_clauses.append("m.title ILIKE %s")
             params.append(f"%{title}%")
 
-        if genre:
+        for g in genres:
             where_clauses.append("EXISTS (SELECT 1 FROM Movie_Genre mg2 JOIN Genre g2 ON mg2.genre_id = g2.genre_id WHERE mg2.movie_id = m.movie_id AND g2.name = %s)")
-            params.append(genre)
+            params.append(g)
 
         if tag:
             where_clauses.append("""EXISTS (
@@ -153,10 +145,19 @@ def search_movies():
 
         where_sql = " AND ".join(where_clauses)
 
+        # Sort mapping (whitelist to prevent SQL injection)
+        sort_map = {
+            'rating': 'r_stats.avg_rating',
+            'year': 'm.release_year',
+            'popularity': 'r_stats.rating_count',
+        }
+        sort_column = sort_map.get(sort_by, 'm.release_year')
+        sort_direction = 'ASC' if sort_dir == 'asc' else 'DESC'
+
         joins = """
             FROM Movie m
             LEFT JOIN (
-                SELECT movie_id, AVG(rating) as avg_rating
+                SELECT movie_id, AVG(rating) as avg_rating, COUNT(rating) as rating_count
                 FROM Rating
                 GROUP BY movie_id
             ) r_stats ON m.movie_id = r_stats.movie_id
@@ -171,15 +172,15 @@ def search_movies():
         # Get paginated results with genres aggregated
         data_query = f"""
             SELECT m.movie_id, m.title, m.release_year, m.runtime, m.tmdb_id, m.poster_url,
-                   r_stats.avg_rating,
+                   r_stats.avg_rating, r_stats.rating_count,
                    COALESCE(
                        ARRAY_AGG(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL),
                        ARRAY[]::text[]
                    ) as genres
             {joins}
             WHERE {where_sql}
-            GROUP BY m.movie_id, m.title, m.release_year, m.runtime, m.tmdb_id, m.poster_url, r_stats.avg_rating
-            ORDER BY m.release_year DESC
+            GROUP BY m.movie_id, m.title, m.release_year, m.runtime, m.tmdb_id, m.poster_url, r_stats.avg_rating, r_stats.rating_count
+            ORDER BY {sort_column} {sort_direction}
         """
 
         data_params = list(params)

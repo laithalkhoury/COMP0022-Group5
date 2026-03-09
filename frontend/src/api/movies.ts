@@ -106,11 +106,13 @@ export function getMovies(params: MovieQueryParams): Promise<PaginatedResponse<M
     const backendParams: Record<string, unknown> = { limit: size, offset };
 
     if (params.title) backendParams.title = params.title;
-    if (params.genres?.length) backendParams.genre = params.genres[0];
+    if (params.genres?.length) backendParams.genre = params.genres;
     if (params.tag) backendParams.tag = params.tag;
     if (params.crew) backendParams.crew = params.crew;
     if (params.ratingMin != null) backendParams.min_rating = params.ratingMin;
     if (params.ratingMax != null) backendParams.max_rating = params.ratingMax;
+    if (params.sortBy) backendParams.sort_by = params.sortBy;
+    if (params.sortDir) backendParams.sort_dir = params.sortDir;
 
     if (params.dateFrom) {
         const year = parseInt(params.dateFrom.substring(0, 4), 10);
@@ -123,8 +125,7 @@ export function getMovies(params: MovieQueryParams): Promise<PaginatedResponse<M
 
     return apiFetch<BackendSearchResponse>('/api/movies', backendParams).then((data) => {
         const items = data.results.map(toMovieSummary);
-        // Backend returns count of current page only; infer whether more pages exist
-        const totalPages = data.count >= size ? page + 1 : page;
+        const totalPages = Math.ceil(data.count / size) || 1;
         return { items, page, size, total: data.count, totalPages };
     });
 }
