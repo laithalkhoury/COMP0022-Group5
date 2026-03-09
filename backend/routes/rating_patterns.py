@@ -9,6 +9,7 @@ rating_patterns_bp = Blueprint('rating_patterns', __name__)
 def scatter_data():
     movie_id = request.args.get('movie_id', type=int)
     genres = request.args.getlist('genre')
+    min_ratings = request.args.get('min_ratings', 1, type=int)
 
     if not movie_id or not genres:
         return jsonify({"error": "movie_id and at least one genre are required"}), 400
@@ -46,7 +47,8 @@ def scatter_data():
             WHERE r1.movie_id = %s
               AND r2.movie_id != r1.movie_id
             GROUP BY r1.ml_user_id, r1.rating
-        """, (*genres, len(genres), movie_id))
+            HAVING COUNT(r2.rating) >= %s
+        """, (*genres, len(genres), movie_id, min_ratings))
 
         rows = cur.fetchall()
 
@@ -78,6 +80,100 @@ def scatter_data():
             "points": points,
             "count": n,
             "correlation": correlation,
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@rating_patterns_bp.route('/api/rating-patterns/scatter-genre', methods=['GET'])
+def scatter_genre_data():
+    genres_x = request.args.getlist('genre_x')
+    genres_y = request.args.getlist('genre_y')
+    min_ratings = request.args.get('min_ratings', 1, type=int)
+
+    if not genres_x or not genres_y:
+        return jsonify({"error": "genre_x and genre_y are required"}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Build subquery for X-genre movies (must match ALL X-genres)
+        x_placeholders = ','.join(['%s'] * len(genres_x))
+        # Build subquery for Y-genre movies (must match ALL Y-genres)
+        y_placeholders = ','.join(['%s'] * len(genres_y))
+
+        # Find users who rated at least min_ratings movies in each genre group,
+        # and compute their average rating per group.
+        cur.execute(f"""
+            SELECT x_data.ml_user_id, x_data.x_avg_rating, y_data.y_avg_rating
+            FROM (
+                SELECT r.ml_user_id, AVG(r.rating) AS x_avg_rating
+                FROM rating r
+                JOIN (
+                    SELECT mg.movie_id
+                    FROM movie_genre mg
+                    JOIN genre g ON mg.genre_id = g.genre_id
+                    WHERE g.name IN ({x_placeholders})
+                    GROUP BY mg.movie_id
+                    HAVING COUNT(DISTINCT g.name) = %s
+                ) x_movies ON r.movie_id = x_movies.movie_id
+                GROUP BY r.ml_user_id
+                HAVING COUNT(r.rating) >= %s
+            ) x_data
+            JOIN (
+                SELECT r.ml_user_id, AVG(r.rating) AS y_avg_rating
+                FROM rating r
+                JOIN (
+                    SELECT mg.movie_id
+                    FROM movie_genre mg
+                    JOIN genre g ON mg.genre_id = g.genre_id
+                    WHERE g.name IN ({y_placeholders})
+                    GROUP BY mg.movie_id
+                    HAVING COUNT(DISTINCT g.name) = %s
+                ) y_movies ON r.movie_id = y_movies.movie_id
+                GROUP BY r.ml_user_id
+                HAVING COUNT(r.rating) >= %s
+            ) y_data ON x_data.ml_user_id = y_data.ml_user_id
+        """, (*genres_x, len(genres_x), min_ratings,
+              *genres_y, len(genres_y), min_ratings))
+
+        rows = cur.fetchall()
+
+        points = []
+        xs = []
+        ys = []
+        for row in rows:
+            x = round(float(row['x_avg_rating']), 2)
+            y = round(float(row['y_avg_rating']), 2)
+            points.append({"xAvgRating": x, "yAvgRating": y})
+            xs.append(x)
+            ys.append(y)
+
+        # Compute Pearson correlation
+        correlation = None
+        n = len(xs)
+        if n >= 2:
+            mean_x = sum(xs) / n
+            mean_y = sum(ys) / n
+            cov = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(xs, ys))
+            std_x = math.sqrt(sum((xi - mean_x) ** 2 for xi in xs))
+            std_y = math.sqrt(sum((yi - mean_y) ** 2 for yi in ys))
+            if std_x > 0 and std_y > 0:
+                correlation = round(cov / (std_x * std_y), 4)
+
+        return jsonify({
+            "genresX": genres_x,
+            "genresY": genres_y,
+            "points": points,
+            "count": n,
+            "correlation": correlation,
+            "minRatings": min_ratings,
         })
 
     except Exception as e:

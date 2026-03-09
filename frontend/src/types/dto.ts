@@ -94,3 +94,17 @@ export interface MovieSearchResult {
     year: number;
     genres: string[];
 }
+
+export interface GenreScatterPoint {
+    xAvgRating: number;
+    yAvgRating: number;
+}
+
+export interface GenreVsGenreResponse {
+    genresX: string[];
+    genresY: string[];
+    points: GenreScatterPoint[];
+    count: number;
+    correlation: number | null;
+    minRatings: number;
+}
