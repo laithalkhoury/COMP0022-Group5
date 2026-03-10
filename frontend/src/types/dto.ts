@@ -74,3 +74,34 @@ export interface PredictionResponse {
         poster_url: string | null;
     }[];
 }
+
+// requirement 2 types
+export interface GenrePopularity {
+    genre: string;
+    movie_count: number;
+    engagement_volume: number;
+    average_rating: number;
+    commercial_indicator: number;
+}
+
+export interface GenrePolarization {
+    genre: string;
+    sample_size: number;
+    standard_deviation: number;
+    love_hate_ratio: number;
+    status: 'Highly Polarizing' | 'Consensus';
+}
+
+export interface PersonalityTraits {
+    openness: number;
+    extraversion: number;
+    emotional_stability: number;
+    agreeableness: number;
+    conscientiousness: number;
+}
+
+export interface NicheInsight {
+    genre: string;
+    target_persona_traits: PersonalityTraits;
+    niche_strength: number;
+}
