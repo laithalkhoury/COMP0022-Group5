@@ -6,6 +6,7 @@ import PlaceholderPage from '@/pages/PlaceholderPage';
 import PredictiveRatingsPage from '@/pages/PredictiveRatingsPage';
 import RatingPatternsPage from '@/pages/RatingPatternsPage';
 import ReportsPage from '@/pages/ReportsPage';
+import LoginPage from '@/pages/LoginPage';
 
 const router = createBrowserRouter([
     {
@@ -19,7 +20,7 @@ const router = createBrowserRouter([
             { path: 'rating-patterns', element: <RatingPatternsPage /> },
             { path: 'reports', element: <ReportsPage /> },
             { path: 'planner', element: <PlaceholderPage title="Planner" /> },
-            { path: 'login', element: <PlaceholderPage title="Login" /> },
+            { path: 'login', element: <LoginPage /> },
         ],
     },
 ]);

@@ -42,7 +42,10 @@ def register():
         conn.commit()
         return jsonify({"message": "User created", "user_id": user_id}), 201
     except Exception as e:
-        return jsonify({"error": "Username already exists or database error"}), 400
+        if 'duplicate key value violates unique constraint "app_user_username_key"' in str(e):
+            return jsonify({"error": "Username already exists"}), 400
+        else:
+            return jsonify({"error": "An internal database error occurred"}), 400
     finally:
         if conn: conn.close()
 

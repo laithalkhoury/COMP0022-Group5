@@ -1,4 +1,3 @@
-import { apiFetch } from './client';
 import type { PredictionRequest, PredictionResponse } from '@/types/dto';
 
 export async function getPrediction(data: PredictionRequest): Promise<PredictionResponse> {
