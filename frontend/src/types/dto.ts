@@ -108,3 +108,16 @@ export interface GenreVsGenreResponse {
     correlation: number | null;
     minRatings: number;
 }
+
+export interface PreferenceGenreEntry {
+    genreCombination: string;
+    avgRating: number;
+    numUsers: number;
+}
+
+export interface PreferenceAnalysisResponse {
+    thresholdType: 'low' | 'high';
+    thresholdValue: number;
+    combinationType: 'single' | 'pair';
+    entries: PreferenceGenreEntry[];
+}

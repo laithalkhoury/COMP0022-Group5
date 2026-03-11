@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { ScatterResponse, MovieSearchResult, GenreVsGenreResponse } from '@/types/dto';
+import type { ScatterResponse, MovieSearchResult, GenreVsGenreResponse, PreferenceAnalysisResponse } from '@/types/dto';
 
 export async function getScatterData(
     movieId: number,
@@ -22,6 +22,26 @@ export async function getGenreVsGenreData(
         genre_x: genresX,
         genre_y: genresY,
         min_ratings: minRatings,
+    });
+}
+
+export async function getPreferenceAnalysis(params: {
+    mode: 'movie-vs-genre' | 'genre-vs-genre';
+    movieId?: number;
+    genresX?: string[];
+    thresholdValue: number;
+    thresholdType: 'low' | 'high';
+    minRatings?: number;
+    combinationType: 'single' | 'pair';
+}): Promise<PreferenceAnalysisResponse> {
+    return apiFetch<PreferenceAnalysisResponse>('/api/rating-patterns/preference-analysis', {
+        mode: params.mode,
+        movie_id: params.movieId,
+        genre_x: params.genresX,
+        threshold_value: params.thresholdValue,
+        threshold_type: params.thresholdType,
+        min_ratings: params.minRatings,
+        combination_type: params.combinationType,
     });
 }
 

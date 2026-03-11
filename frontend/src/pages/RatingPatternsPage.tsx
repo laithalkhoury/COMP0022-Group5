@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
     ScatterChart,
     Scatter,
@@ -7,18 +7,23 @@ import {
     CartesianGrid,
     ResponsiveContainer,
     Label,
+    ReferenceArea,
+    ReferenceLine,
 } from 'recharts';
 import { getFilterOptions } from '@/api/filters';
-import { getScatterData, getGenreVsGenreData, searchMovies } from '@/api/ratingPatterns';
+import { getScatterData, getGenreVsGenreData, getPreferenceAnalysis, searchMovies } from '@/api/ratingPatterns';
 import type {
     FilterOptions,
     ScatterResponse,
     GenreVsGenreResponse,
     MovieSearchResult,
+    PreferenceAnalysisResponse,
 } from '@/types/dto';
 import { Spinner, ErrorPanel, EmptyState } from '@/components/ui';
 
 type Mode = 'movie-vs-genre' | 'genre-vs-genre';
+
+const RATING_STEPS = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0];
 
 /* ── Interpretation helpers ─────────────────────────────── */
 
@@ -139,6 +144,82 @@ function GenreMultiSelect({
     );
 }
 
+/* ── Preference table (reusable) ────────────────────────── */
+
+function PreferenceTable({
+    label,
+    thresholdValue,
+    analysis,
+    sortAsc,
+    onToggleSort,
+    colorClass,
+}: {
+    label: string;
+    thresholdValue: number;
+    analysis: PreferenceAnalysisResponse | null;
+    sortAsc: boolean;
+    onToggleSort: () => void;
+    colorClass: 'red' | 'green';
+}) {
+    const sorted = useMemo(() => {
+        if (!analysis) return [];
+        const entries = [...analysis.entries];
+        entries.sort((a, b) => sortAsc ? a.avgRating - b.avgRating : b.avgRating - a.avgRating);
+        return entries;
+    }, [analysis, sortAsc]);
+
+    const headerColor = colorClass === 'red'
+        ? 'text-red-600 dark:text-red-400'
+        : 'text-green-600 dark:text-green-400';
+    const bgAccent = colorClass === 'red'
+        ? 'bg-red-50 dark:bg-red-900/10'
+        : 'bg-green-50 dark:bg-green-900/10';
+
+    return (
+        <div className="flex-1 min-h-0 flex flex-col">
+            <h3 className={`text-sm font-bold ${headerColor} mb-2`}>
+                {label} ({colorClass === 'red' ? '<=' : '>='} {thresholdValue})
+            </h3>
+            {!analysis ? (
+                <div className="flex items-center justify-center py-4">
+                    <Spinner />
+                </div>
+            ) : sorted.length === 0 ? (
+                <p className="text-xs text-gray-400 py-2">No data for this region.</p>
+            ) : (
+                <div className="overflow-y-auto max-h-[200px] border border-gray-200 dark:border-gray-700 rounded-md">
+                    <table className="w-full text-xs">
+                        <thead className={`sticky top-0 ${bgAccent}`}>
+                            <tr>
+                                <th className="text-left px-2 py-1.5 font-semibold">Genre</th>
+                                <th
+                                    className="text-right px-2 py-1.5 font-semibold cursor-pointer select-none hover:underline"
+                                    onClick={onToggleSort}
+                                >
+                                    Avg Rating {sortAsc ? '\u25B2' : '\u25BC'}
+                                </th>
+                                <th className="text-right px-2 py-1.5 font-semibold">Users</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {sorted.map((entry) => (
+                                <tr
+                                    key={entry.genreCombination}
+                                    className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                >
+                                    <td className="px-2 py-1">{entry.genreCombination}</td>
+                                    <td className="px-2 py-1 text-right font-mono">{entry.avgRating.toFixed(2)}</td>
+                                    <td className="px-2 py-1 text-right text-gray-400">{entry.numUsers}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
+
 /* ── Main page ──────────────────────────────────────────── */
 
 export default function RatingPatternsPage() {
@@ -169,6 +250,17 @@ export default function RatingPatternsPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Preference analysis
+    const [lowThreshold, setLowThreshold] = useState<number | null>(null);
+    const [highThreshold, setHighThreshold] = useState<number | null>(null);
+    const [combinationType, setCombinationType] = useState<'single' | 'pair'>('single');
+    const [lowSortAsc, setLowSortAsc] = useState(false);
+    const [highSortAsc, setHighSortAsc] = useState(false);
+    const [lowAnalysis, setLowAnalysis] = useState<PreferenceAnalysisResponse | null>(null);
+    const [highAnalysis, setHighAnalysis] = useState<PreferenceAnalysisResponse | null>(null);
+    const [analysisLoading, setAnalysisLoading] = useState(false);
+    const analysisDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     // Load genre options
     useEffect(() => {
         getFilterOptions()
@@ -192,6 +284,10 @@ export default function RatingPatternsPage() {
         setMovieScatter(null);
         setGenreScatter(null);
         setError(null);
+        setLowThreshold(null);
+        setHighThreshold(null);
+        setLowAnalysis(null);
+        setHighAnalysis(null);
     }, [mode]);
 
     // Debounced movie search
@@ -258,6 +354,77 @@ export default function RatingPatternsPage() {
             .finally(() => setLoading(false));
     }, [mode, selectedGenresX, selectedGenresY, minRatings]);
 
+    // Fetch: preference analysis (debounced)
+    useEffect(() => {
+        if (analysisDebounceRef.current) clearTimeout(analysisDebounceRef.current);
+
+        // Validate: need scatter data loaded and at least one threshold
+        const hasScatter = mode === 'movie-vs-genre' ? !!movieScatter : !!genreScatter;
+        if (!hasScatter) {
+            setLowAnalysis(null);
+            setHighAnalysis(null);
+            return;
+        }
+
+        // Validate overlap
+        const hasOverlap = lowThreshold !== null && highThreshold !== null && lowThreshold >= highThreshold;
+
+        if (lowThreshold === null && highThreshold === null) {
+            setLowAnalysis(null);
+            setHighAnalysis(null);
+            return;
+        }
+
+        analysisDebounceRef.current = setTimeout(async () => {
+            setAnalysisLoading(true);
+            const baseParams = {
+                mode,
+                movieId: mode === 'movie-vs-genre' ? selectedMovie?.movieId : undefined,
+                genresX: mode === 'genre-vs-genre' ? selectedGenresX : undefined,
+                minRatings,
+                combinationType,
+            };
+
+            try {
+                const promises: Promise<void>[] = [];
+
+                if (lowThreshold !== null && !hasOverlap) {
+                    promises.push(
+                        getPreferenceAnalysis({
+                            ...baseParams,
+                            thresholdValue: lowThreshold,
+                            thresholdType: 'low',
+                        }).then(setLowAnalysis)
+                    );
+                } else {
+                    setLowAnalysis(null);
+                }
+
+                if (highThreshold !== null && !hasOverlap) {
+                    promises.push(
+                        getPreferenceAnalysis({
+                            ...baseParams,
+                            thresholdValue: highThreshold,
+                            thresholdType: 'high',
+                        }).then(setHighAnalysis)
+                    );
+                } else {
+                    setHighAnalysis(null);
+                }
+
+                await Promise.all(promises);
+            } catch {
+                // Silently handle — individual sections show empty state
+            } finally {
+                setAnalysisLoading(false);
+            }
+        }, 500);
+
+        return () => {
+            if (analysisDebounceRef.current) clearTimeout(analysisDebounceRef.current);
+        };
+    }, [lowThreshold, highThreshold, combinationType, mode, selectedMovie, selectedGenresX, minRatings, movieScatter, genreScatter]);
+
     // Derived display values
     const yLabel = selectedGenresY.join(' + ');
     const xLabelGenre = selectedGenresX.join(' + ');
@@ -295,6 +462,9 @@ export default function RatingPatternsPage() {
             ? !!selectedMovie && selectedGenresY.length > 0
             : selectedGenresX.length > 0 && selectedGenresY.length > 0;
 
+    const hasOverlap = lowThreshold !== null && highThreshold !== null && lowThreshold >= highThreshold;
+    const showPanel = (lowThreshold !== null || highThreshold !== null) && !hasOverlap;
+
     if (loadingOptions) {
         return (
             <div className="flex justify-center py-20">
@@ -306,7 +476,7 @@ export default function RatingPatternsPage() {
     const genres = filterOptions?.genres ?? [];
 
     return (
-        <div className="max-w-5xl mx-auto space-y-8 px-4">
+        <div className="max-w-[1400px] mx-auto space-y-8 px-4">
             <header>
                 <h1 className="text-2xl font-bold">Rating Pattern Analysis</h1>
                 <p className="text-gray-500 dark:text-gray-400">
@@ -393,22 +563,65 @@ export default function RatingPatternsPage() {
                     />
                 </div>
 
-                {/* Min ratings filter */}
-                <div className="max-w-xs">
-                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
-                        Min Movies Rated per Genre
-                    </label>
-                    <input
-                        type="number"
-                        min={1}
-                        value={minRatings}
-                        onChange={(e) => setMinRatings(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-24 px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">
-                        Only include users who rated at least this many movies in each genre group.
-                    </p>
+                {/* Min ratings + threshold controls */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Min ratings filter */}
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
+                            Min Movies Rated per Genre
+                        </label>
+                        <input
+                            type="number"
+                            min={1}
+                            value={minRatings}
+                            onChange={(e) => setMinRatings(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-24 px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                            Only include users who rated at least this many movies in each genre group.
+                        </p>
+                    </div>
+
+                    {/* Low threshold */}
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
+                            Low Rating Region (&lt;=)
+                        </label>
+                        <select
+                            value={lowThreshold ?? ''}
+                            onChange={(e) => setLowThreshold(e.target.value === '' ? null : parseFloat(e.target.value))}
+                            className="w-24 px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                            <option value="">None</option>
+                            {RATING_STEPS.map((v) => (
+                                <option key={v} value={v}>{v}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* High threshold */}
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
+                            High Rating Region (&gt;=)
+                        </label>
+                        <select
+                            value={highThreshold ?? ''}
+                            onChange={(e) => setHighThreshold(e.target.value === '' ? null : parseFloat(e.target.value))}
+                            className="w-24 px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                            <option value="">None</option>
+                            {RATING_STEPS.map((v) => (
+                                <option key={v} value={v}>{v}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
+
+                {hasOverlap && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Low threshold must be less than high threshold. Adjust the values to see analysis results.
+                    </p>
+                )}
             </div>
 
             {/* Results area */}
@@ -432,48 +645,127 @@ export default function RatingPatternsPage() {
 
                 {!loading && !error && chartData && chartData.count > 0 && (
                     <div className="space-y-6">
-                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm">
-                            <h2 className="text-lg font-bold mb-4">{chartTitle}</h2>
-                            <ResponsiveContainer width="100%" height={450}>
-                                <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 20 }}>
-                                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                                    <XAxis
-                                        type="number"
-                                        dataKey={xDataKey}
-                                        domain={[0, 5.5]}
-                                        ticks={[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]}
-                                        tick={{ fontSize: 12 }}
-                                    >
-                                        <Label
-                                            value={xAxisLabel}
-                                            position="bottom"
-                                            offset={15}
-                                            style={{ fontSize: 13, fill: '#6b7280' }}
-                                        />
-                                    </XAxis>
-                                    <YAxis
-                                        type="number"
-                                        dataKey={yDataKey}
-                                        domain={[0, 5.5]}
-                                        ticks={[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]}
-                                        tick={{ fontSize: 12 }}
-                                    >
-                                        <Label
-                                            value={yAxisLabel}
-                                            angle={-90}
-                                            position="insideLeft"
-                                            offset={0}
-                                            style={{ fontSize: 13, fill: '#6b7280', textAnchor: 'middle' }}
-                                        />
-                                    </YAxis>
-                                    <Scatter
-                                        data={chartData.points}
-                                        fill="#3b82f6"
-                                        fillOpacity={0.5}
-                                        r={3}
-                                    />
-                                </ScatterChart>
-                            </ResponsiveContainer>
+                        <div className={`flex gap-6 ${showPanel ? 'flex-col lg:flex-row' : ''}`}>
+                            {/* Chart column */}
+                            <div className={showPanel ? 'flex-[3] min-w-0' : 'w-full'}>
+                                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm">
+                                    <h2 className="text-lg font-bold mb-4">{chartTitle}</h2>
+                                    <ResponsiveContainer width="100%" height={450}>
+                                        <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 20 }}>
+                                            <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                                            <XAxis
+                                                type="number"
+                                                dataKey={xDataKey}
+                                                domain={[0, 5.5]}
+                                                ticks={[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]}
+                                                tick={{ fontSize: 12 }}
+                                            >
+                                                <Label
+                                                    value={xAxisLabel}
+                                                    position="bottom"
+                                                    offset={15}
+                                                    style={{ fontSize: 13, fill: '#6b7280' }}
+                                                />
+                                            </XAxis>
+                                            <YAxis
+                                                type="number"
+                                                dataKey={yDataKey}
+                                                domain={[0, 5.5]}
+                                                ticks={[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]}
+                                                tick={{ fontSize: 12 }}
+                                            >
+                                                <Label
+                                                    value={yAxisLabel}
+                                                    angle={-90}
+                                                    position="insideLeft"
+                                                    offset={0}
+                                                    style={{ fontSize: 13, fill: '#6b7280', textAnchor: 'middle' }}
+                                                />
+                                            </YAxis>
+                                            {lowThreshold !== null && !hasOverlap && (
+                                                <>
+                                                    <ReferenceArea x1={0} x2={lowThreshold} fill="#ef4444" fillOpacity={0.08} />
+                                                    <ReferenceLine x={lowThreshold} stroke="#ef4444" strokeDasharray="5 5" strokeWidth={1.5} />
+                                                </>
+                                            )}
+                                            {highThreshold !== null && !hasOverlap && (
+                                                <>
+                                                    <ReferenceArea x1={highThreshold} x2={5.5} fill="#22c55e" fillOpacity={0.08} />
+                                                    <ReferenceLine x={highThreshold} stroke="#22c55e" strokeDasharray="5 5" strokeWidth={1.5} />
+                                                </>
+                                            )}
+                                            <Scatter
+                                                data={chartData.points}
+                                                fill="#3b82f6"
+                                                fillOpacity={0.5}
+                                                r={3}
+                                            />
+                                        </ScatterChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+
+                            {/* Analysis side panel */}
+                            {showPanel && (
+                                <div className="flex-[2] min-w-0">
+                                    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm space-y-4 h-full">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-sm font-bold">Preference Analysis</h3>
+                                            {analysisLoading && <Spinner />}
+                                        </div>
+
+                                        {/* Combination type toggle */}
+                                        <div className="flex gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setCombinationType('single')}
+                                                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                                                    combinationType === 'single'
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                                }`}
+                                            >
+                                                Single Genres
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setCombinationType('pair')}
+                                                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                                                    combinationType === 'pair'
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                                }`}
+                                            >
+                                                Genre Pairs
+                                            </button>
+                                        </div>
+
+                                        {/* Low region table */}
+                                        {lowThreshold !== null && (
+                                            <PreferenceTable
+                                                label="Low Raters"
+                                                thresholdValue={lowThreshold}
+                                                analysis={lowAnalysis}
+                                                sortAsc={lowSortAsc}
+                                                onToggleSort={() => setLowSortAsc((p) => !p)}
+                                                colorClass="red"
+                                            />
+                                        )}
+
+                                        {/* High region table */}
+                                        {highThreshold !== null && (
+                                            <PreferenceTable
+                                                label="High Raters"
+                                                thresholdValue={highThreshold}
+                                                analysis={highAnalysis}
+                                                sortAsc={highSortAsc}
+                                                onToggleSort={() => setHighSortAsc((p) => !p)}
+                                                colorClass="green"
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm space-y-3">

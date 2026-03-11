@@ -228,3 +228,122 @@ def movie_search():
     finally:
         if conn:
             conn.close()
+
+
+@rating_patterns_bp.route('/api/rating-patterns/preference-analysis', methods=['GET'])
+def preference_analysis():
+    mode = request.args.get('mode')  # 'movie-vs-genre' or 'genre-vs-genre'
+    threshold_value = request.args.get('threshold_value', type=float)
+    threshold_type = request.args.get('threshold_type')  # 'low' or 'high'
+    combination_type = request.args.get('combination_type', 'single')  # 'single' or 'pair'
+    min_ratings = request.args.get('min_ratings', 1, type=int)
+
+    if not mode or threshold_value is None or threshold_type not in ('low', 'high'):
+        return jsonify({"error": "mode, threshold_value, and threshold_type (low/high) are required"}), 400
+    if combination_type not in ('single', 'pair'):
+        return jsonify({"error": "combination_type must be 'single' or 'pair'"}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        comparison = '<=' if threshold_type == 'low' else '>='
+
+        # Phase 1: Get filtered user IDs based on mode and threshold
+        if mode == 'movie-vs-genre':
+            movie_id = request.args.get('movie_id', type=int)
+            if not movie_id:
+                return jsonify({"error": "movie_id is required for movie-vs-genre mode"}), 400
+
+            cur.execute(f"""
+                CREATE TEMP TABLE filtered_users AS
+                SELECT DISTINCT ml_user_id
+                FROM rating
+                WHERE movie_id = %s AND rating {comparison} %s
+            """, (movie_id, threshold_value))
+
+        elif mode == 'genre-vs-genre':
+            genres_x = request.args.getlist('genre_x')
+            if not genres_x:
+                return jsonify({"error": "genre_x is required for genre-vs-genre mode"}), 400
+
+            x_placeholders = ','.join(['%s'] * len(genres_x))
+            cur.execute(f"""
+                CREATE TEMP TABLE filtered_users AS
+                SELECT r.ml_user_id
+                FROM rating r
+                JOIN (
+                    SELECT mg.movie_id
+                    FROM movie_genre mg
+                    JOIN genre g ON mg.genre_id = g.genre_id
+                    WHERE g.name IN ({x_placeholders})
+                    GROUP BY mg.movie_id
+                    HAVING COUNT(DISTINCT g.name) = %s
+                ) x_movies ON r.movie_id = x_movies.movie_id
+                GROUP BY r.ml_user_id
+                HAVING COUNT(r.rating) >= %s
+                   AND AVG(r.rating) {comparison} %s
+            """, (*genres_x, len(genres_x), min_ratings, threshold_value))
+        else:
+            return jsonify({"error": "Invalid mode"}), 400
+
+        # Phase 2: Compute genre preferences for filtered users
+        if combination_type == 'single':
+            cur.execute("""
+                SELECT g.name AS genre_combination,
+                       ROUND(AVG(r.rating)::numeric, 4) AS avg_rating,
+                       COUNT(DISTINCT r.ml_user_id) AS num_users
+                FROM rating r
+                JOIN movie_genre mg ON r.movie_id = mg.movie_id
+                JOIN genre g ON mg.genre_id = g.genre_id
+                WHERE r.ml_user_id IN (SELECT ml_user_id FROM filtered_users)
+                GROUP BY g.name
+                ORDER BY avg_rating DESC
+            """)
+        else:
+            # pair: movies must have BOTH genres (AND logic)
+            cur.execute("""
+                WITH pair_movies AS (
+                    SELECT mg1.movie_id, g1.name AS genre1, g2.name AS genre2
+                    FROM movie_genre mg1
+                    JOIN genre g1 ON mg1.genre_id = g1.genre_id
+                    JOIN movie_genre mg2 ON mg1.movie_id = mg2.movie_id
+                    JOIN genre g2 ON mg2.genre_id = g2.genre_id
+                    WHERE g1.name < g2.name
+                )
+                SELECT pm.genre1 || ' + ' || pm.genre2 AS genre_combination,
+                       ROUND(AVG(r.rating)::numeric, 4) AS avg_rating,
+                       COUNT(DISTINCT r.ml_user_id) AS num_users
+                FROM rating r
+                JOIN pair_movies pm ON r.movie_id = pm.movie_id
+                WHERE r.ml_user_id IN (SELECT ml_user_id FROM filtered_users)
+                GROUP BY pm.genre1, pm.genre2
+                ORDER BY avg_rating DESC
+            """)
+
+        rows = cur.fetchall()
+        entries = [
+            {
+                "genreCombination": row['genre_combination'],
+                "avgRating": float(row['avg_rating']),
+                "numUsers": int(row['num_users']),
+            }
+            for row in rows
+        ]
+
+        # Clean up temp table
+        cur.execute("DROP TABLE IF EXISTS filtered_users")
+
+        return jsonify({
+            "thresholdType": threshold_type,
+            "thresholdValue": threshold_value,
+            "combinationType": combination_type,
+            "entries": entries,
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
