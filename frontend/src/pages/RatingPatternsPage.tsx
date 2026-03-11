@@ -371,9 +371,6 @@ export default function RatingPatternsPage() {
             return;
         }
 
-        // Validate overlap
-        const hasOverlap = lowThreshold !== null && highThreshold !== null && lowThreshold >= highThreshold;
-
         if (lowThreshold === null && highThreshold === null) {
             setLowAnalysis(null);
             setHighAnalysis(null);
@@ -393,7 +390,7 @@ export default function RatingPatternsPage() {
             try {
                 const promises: Promise<void>[] = [];
 
-                if (lowThreshold !== null && !hasOverlap) {
+                if (lowThreshold !== null) {
                     promises.push(
                         getPreferenceAnalysis({
                             ...baseParams,
@@ -407,7 +404,7 @@ export default function RatingPatternsPage() {
                     setLowAnalysis(null);
                 }
 
-                if (highThreshold !== null && !hasOverlap) {
+                if (highThreshold !== null) {
                     promises.push(
                         getPreferenceAnalysis({
                             ...baseParams,
@@ -471,8 +468,7 @@ export default function RatingPatternsPage() {
             ? !!selectedMovie && selectedGenresY.length > 0
             : selectedGenresX.length > 0 && selectedGenresY.length > 0;
 
-    const hasOverlap = lowThreshold !== null && highThreshold !== null && lowThreshold >= highThreshold;
-    const showPanel = (lowThreshold !== null || highThreshold !== null) && !hasOverlap;
+    const showPanel = lowThreshold !== null || highThreshold !== null;
 
     // Count users in each threshold region from loaded scatter points
     function pointX(p: { movieRating?: number; xAvgRating?: number }): number {
@@ -667,11 +663,6 @@ export default function RatingPatternsPage() {
                     </datalist>
                 </div>
 
-                {hasOverlap && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
-                        Low threshold must be less than high threshold. Adjust the values to see analysis results.
-                    </p>
-                )}
             </div>
 
             {/* Results area */}
@@ -732,13 +723,13 @@ export default function RatingPatternsPage() {
                                                     style={{ fontSize: 13, fill: '#6b7280', textAnchor: 'middle' }}
                                                 />
                                             </YAxis>
-                                            {lowThreshold !== null && !hasOverlap && (
+                                            {lowThreshold !== null && (
                                                 <>
                                                     <ReferenceArea x1={0} x2={lowThreshold} fill="#ef4444" fillOpacity={0.08} />
                                                     <ReferenceLine x={lowThreshold} stroke="#ef4444" strokeDasharray="5 5" strokeWidth={1.5} />
                                                 </>
                                             )}
-                                            {highThreshold !== null && !hasOverlap && (
+                                            {highThreshold !== null && (
                                                 <>
                                                     <ReferenceArea x1={highThreshold} x2={5.5} fill="#22c55e" fillOpacity={0.08} />
                                                     <ReferenceLine x={highThreshold} stroke="#22c55e" strokeDasharray="5 5" strokeWidth={1.5} />
