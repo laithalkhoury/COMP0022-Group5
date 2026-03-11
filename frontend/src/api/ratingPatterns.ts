@@ -33,6 +33,8 @@ export async function getPreferenceAnalysis(params: {
     thresholdType: 'low' | 'high';
     minRatings?: number;
     combinationType: 'single' | 'pair';
+    sortBy?: 'genre' | 'avg_rating' | 'num_users';
+    sortDir?: 'asc' | 'desc';
 }): Promise<PreferenceAnalysisResponse> {
     return apiFetch<PreferenceAnalysisResponse>('/api/rating-patterns/preference-analysis', {
         mode: params.mode,
@@ -42,6 +44,8 @@ export async function getPreferenceAnalysis(params: {
         threshold_type: params.thresholdType,
         min_ratings: params.minRatings,
         combination_type: params.combinationType,
+        sort_by: params.sortBy,
+        sort_dir: params.sortDir,
     });
 }
 

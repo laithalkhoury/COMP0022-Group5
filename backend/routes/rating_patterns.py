@@ -237,11 +237,17 @@ def preference_analysis():
     threshold_type = request.args.get('threshold_type')  # 'low' or 'high'
     combination_type = request.args.get('combination_type', 'single')  # 'single' or 'pair'
     min_ratings = request.args.get('min_ratings', 1, type=int)
+    sort_by = request.args.get('sort_by', 'avg_rating')  # 'genre' | 'avg_rating' | 'num_users'
+    sort_dir = request.args.get('sort_dir', 'desc')  # 'asc' | 'desc'
 
     if not mode or threshold_value is None or threshold_type not in ('low', 'high'):
         return jsonify({"error": "mode, threshold_value, and threshold_type (low/high) are required"}), 400
     if combination_type not in ('single', 'pair'):
         return jsonify({"error": "combination_type must be 'single' or 'pair'"}), 400
+    if sort_by not in ('genre', 'avg_rating', 'num_users'):
+        sort_by = 'avg_rating'
+    if sort_dir not in ('asc', 'desc'):
+        sort_dir = 'desc'
 
     conn = None
     try:
@@ -289,8 +295,17 @@ def preference_analysis():
             return jsonify({"error": "Invalid mode"}), 400
 
         # Phase 2: Compute genre preferences for filtered users
+        direction = 'ASC' if sort_dir == 'asc' else 'DESC'
+
         if combination_type == 'single':
-            cur.execute("""
+            if sort_by == 'genre':
+                order_clause = f'genre_combination {direction}'
+            elif sort_by == 'num_users':
+                order_clause = f'num_users {direction}'
+            else:
+                order_clause = f'avg_rating {direction}'
+
+            cur.execute(f"""
                 SELECT g.name AS genre_combination,
                        ROUND(AVG(r.rating)::numeric, 4) AS avg_rating,
                        COUNT(DISTINCT r.ml_user_id) AS num_users
@@ -299,11 +314,18 @@ def preference_analysis():
                 JOIN genre g ON mg.genre_id = g.genre_id
                 WHERE r.ml_user_id IN (SELECT ml_user_id FROM filtered_users)
                 GROUP BY g.name
-                ORDER BY avg_rating DESC
+                ORDER BY {order_clause}
             """)
         else:
             # pair: movies must have BOTH genres (AND logic)
-            cur.execute("""
+            if sort_by == 'genre':
+                order_clause = f'genre_combination {direction}'
+            elif sort_by == 'num_users':
+                order_clause = f'num_users {direction}'
+            else:
+                order_clause = f'avg_rating {direction}'
+
+            cur.execute(f"""
                 WITH pair_movies AS (
                     SELECT mg1.movie_id, g1.name AS genre1, g2.name AS genre2
                     FROM movie_genre mg1
@@ -319,7 +341,7 @@ def preference_analysis():
                 JOIN pair_movies pm ON r.movie_id = pm.movie_id
                 WHERE r.ml_user_id IN (SELECT ml_user_id FROM filtered_users)
                 GROUP BY pm.genre1, pm.genre2
-                ORDER BY avg_rating DESC
+                ORDER BY {order_clause}
             """)
 
         rows = cur.fetchall()

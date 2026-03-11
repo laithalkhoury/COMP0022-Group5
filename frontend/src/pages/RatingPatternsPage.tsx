@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
     ScatterChart,
     Scatter,
@@ -146,34 +146,38 @@ function GenreMultiSelect({
 
 /* ── Preference table (reusable) ────────────────────────── */
 
+type SortColumn = 'genre' | 'avg_rating' | 'num_users';
+type SortDir = 'asc' | 'desc';
+interface SortState { column: SortColumn; dir: SortDir; }
+
+function sortArrow(active: boolean, dir: SortDir) {
+    if (!active) return '';
+    return dir === 'asc' ? ' \u25B2' : ' \u25BC';
+}
+
 function PreferenceTable({
     label,
     thresholdValue,
     analysis,
-    sortAsc,
-    onToggleSort,
+    sort,
+    onSort,
     colorClass,
 }: {
     label: string;
     thresholdValue: number;
     analysis: PreferenceAnalysisResponse | null;
-    sortAsc: boolean;
-    onToggleSort: () => void;
+    sort: SortState;
+    onSort: (column: SortColumn) => void;
     colorClass: 'red' | 'green';
 }) {
-    const sorted = useMemo(() => {
-        if (!analysis) return [];
-        const entries = [...analysis.entries];
-        entries.sort((a, b) => sortAsc ? a.avgRating - b.avgRating : b.avgRating - a.avgRating);
-        return entries;
-    }, [analysis, sortAsc]);
-
     const headerColor = colorClass === 'red'
         ? 'text-red-600 dark:text-red-400'
         : 'text-green-600 dark:text-green-400';
     const bgAccent = colorClass === 'red'
         ? 'bg-red-50 dark:bg-red-900/10'
         : 'bg-green-50 dark:bg-green-900/10';
+
+    const thClass = 'px-2 py-1.5 font-semibold cursor-pointer select-none hover:underline';
 
     return (
         <div className="flex-1 min-h-0 flex flex-col">
@@ -184,25 +188,26 @@ function PreferenceTable({
                 <div className="flex items-center justify-center py-4">
                     <Spinner />
                 </div>
-            ) : sorted.length === 0 ? (
+            ) : analysis.entries.length === 0 ? (
                 <p className="text-xs text-gray-400 py-2">No data for this region.</p>
             ) : (
                 <div className="overflow-y-auto max-h-[200px] border border-gray-200 dark:border-gray-700 rounded-md">
                     <table className="w-full text-xs">
                         <thead className={`sticky top-0 ${bgAccent}`}>
                             <tr>
-                                <th className="text-left px-2 py-1.5 font-semibold">Genre</th>
-                                <th
-                                    className="text-right px-2 py-1.5 font-semibold cursor-pointer select-none hover:underline"
-                                    onClick={onToggleSort}
-                                >
-                                    Avg Rating {sortAsc ? '\u25B2' : '\u25BC'}
+                                <th className={`text-left ${thClass}`} onClick={() => onSort('genre')}>
+                                    Genre{sortArrow(sort.column === 'genre', sort.dir)}
                                 </th>
-                                <th className="text-right px-2 py-1.5 font-semibold">Users</th>
+                                <th className={`text-right ${thClass}`} onClick={() => onSort('avg_rating')}>
+                                    Avg Rating{sortArrow(sort.column === 'avg_rating', sort.dir)}
+                                </th>
+                                <th className={`text-right ${thClass}`} onClick={() => onSort('num_users')}>
+                                    Users{sortArrow(sort.column === 'num_users', sort.dir)}
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
-                            {sorted.map((entry) => (
+                            {analysis.entries.map((entry) => (
                                 <tr
                                     key={entry.genreCombination}
                                     className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50"
@@ -254,8 +259,8 @@ export default function RatingPatternsPage() {
     const [lowThreshold, setLowThreshold] = useState<number | null>(null);
     const [highThreshold, setHighThreshold] = useState<number | null>(null);
     const [combinationType, setCombinationType] = useState<'single' | 'pair'>('single');
-    const [lowSortAsc, setLowSortAsc] = useState(false);
-    const [highSortAsc, setHighSortAsc] = useState(false);
+    const [lowSort, setLowSort] = useState<SortState>({ column: 'avg_rating', dir: 'desc' });
+    const [highSort, setHighSort] = useState<SortState>({ column: 'avg_rating', dir: 'desc' });
     const [lowAnalysis, setLowAnalysis] = useState<PreferenceAnalysisResponse | null>(null);
     const [highAnalysis, setHighAnalysis] = useState<PreferenceAnalysisResponse | null>(null);
     const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -394,6 +399,8 @@ export default function RatingPatternsPage() {
                             ...baseParams,
                             thresholdValue: lowThreshold,
                             thresholdType: 'low',
+                            sortBy: lowSort.column,
+                            sortDir: lowSort.dir,
                         }).then(setLowAnalysis)
                     );
                 } else {
@@ -406,6 +413,8 @@ export default function RatingPatternsPage() {
                             ...baseParams,
                             thresholdValue: highThreshold,
                             thresholdType: 'high',
+                            sortBy: highSort.column,
+                            sortDir: highSort.dir,
                         }).then(setHighAnalysis)
                     );
                 } else {
@@ -423,7 +432,7 @@ export default function RatingPatternsPage() {
         return () => {
             if (analysisDebounceRef.current) clearTimeout(analysisDebounceRef.current);
         };
-    }, [lowThreshold, highThreshold, combinationType, mode, selectedMovie, selectedGenresX, minRatings, movieScatter, genreScatter]);
+    }, [lowThreshold, highThreshold, combinationType, mode, selectedMovie, selectedGenresX, minRatings, movieScatter, genreScatter, lowSort, highSort]);
 
     // Derived display values
     const yLabel = selectedGenresY.join(' + ');
@@ -746,8 +755,12 @@ export default function RatingPatternsPage() {
                                                 label="Low Raters"
                                                 thresholdValue={lowThreshold}
                                                 analysis={lowAnalysis}
-                                                sortAsc={lowSortAsc}
-                                                onToggleSort={() => setLowSortAsc((p) => !p)}
+                                                sort={lowSort}
+                                                onSort={(col) => setLowSort((prev) =>
+                                                    prev.column === col
+                                                        ? { column: col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+                                                        : { column: col, dir: 'desc' }
+                                                )}
                                                 colorClass="red"
                                             />
                                         )}
@@ -758,8 +771,12 @@ export default function RatingPatternsPage() {
                                                 label="High Raters"
                                                 thresholdValue={highThreshold}
                                                 analysis={highAnalysis}
-                                                sortAsc={highSortAsc}
-                                                onToggleSort={() => setHighSortAsc((p) => !p)}
+                                                sort={highSort}
+                                                onSort={(col) => setHighSort((prev) =>
+                                                    prev.column === col
+                                                        ? { column: col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+                                                        : { column: col, dir: 'desc' }
+                                                )}
                                                 colorClass="green"
                                             />
                                         )}
