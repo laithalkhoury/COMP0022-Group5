@@ -75,6 +75,52 @@ export interface PredictionResponse {
     }[];
 }
 
+export interface ScatterPoint {
+    movieRating: number;
+    genreAvgRating: number;
+}
+
+export interface ScatterResponse {
+    movieTitle: string;
+    genres: string[];
+    points: ScatterPoint[];
+    count: number;
+    correlation: number | null;
+}
+
+export interface MovieSearchResult {
+    movieId: number;
+    title: string;
+    year: number;
+    genres: string[];
+}
+
+export interface GenreScatterPoint {
+    xAvgRating: number;
+    yAvgRating: number;
+}
+
+export interface GenreVsGenreResponse {
+    genresX: string[];
+    genresY: string[];
+    points: GenreScatterPoint[];
+    count: number;
+    correlation: number | null;
+    minRatings: number;
+}
+
+export interface PreferenceGenreEntry {
+    genreCombination: string;
+    avgRating: number;
+    numUsers: number;
+}
+
+export interface PreferenceAnalysisResponse {
+    thresholdType: 'low' | 'high';
+    thresholdValue: number;
+    combinationType: 'single' | 'pair';
+    entries: PreferenceGenreEntry[];
+}
 // requirement 2 types
 export interface GenrePopularity {
     genre: string;
