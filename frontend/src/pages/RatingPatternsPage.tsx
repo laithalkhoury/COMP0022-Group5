@@ -474,6 +474,17 @@ export default function RatingPatternsPage() {
     const hasOverlap = lowThreshold !== null && highThreshold !== null && lowThreshold >= highThreshold;
     const showPanel = (lowThreshold !== null || highThreshold !== null) && !hasOverlap;
 
+    // Count users in each threshold region from loaded scatter points
+    function pointX(p: { movieRating?: number; xAvgRating?: number }): number {
+        return mode === 'movie-vs-genre' ? (p.movieRating ?? 0) : (p.xAvgRating ?? 0);
+    }
+    const lowRegionCount = chartData && lowThreshold !== null
+        ? chartData.points.filter((p) => pointX(p) <= lowThreshold).length
+        : null;
+    const highRegionCount = chartData && highThreshold !== null
+        ? chartData.points.filter((p) => pointX(p) >= highThreshold).length
+        : null;
+
     if (loadingOptions) {
         return (
             <div className="flex justify-center py-20">
@@ -589,6 +600,11 @@ export default function RatingPatternsPage() {
                         <p className="text-xs text-gray-400 mt-1">
                             Only include users who rated at least this many movies in each genre group.
                         </p>
+                        {chartData && (
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold mt-1">
+                                Users plotted: {chartData.count.toLocaleString()}
+                            </p>
+                        )}
                     </div>
 
                     {/* Low threshold */}
@@ -606,6 +622,11 @@ export default function RatingPatternsPage() {
                                 <option key={v} value={v}>{v}</option>
                             ))}
                         </select>
+                        {lowThreshold !== null && chartData && (
+                            <p className="text-xs text-red-600 dark:text-red-400 font-semibold mt-1">
+                                {(lowRegionCount ?? 0).toLocaleString()} users in region
+                            </p>
+                        )}
                     </div>
 
                     {/* High threshold */}
@@ -623,6 +644,11 @@ export default function RatingPatternsPage() {
                                 <option key={v} value={v}>{v}</option>
                             ))}
                         </select>
+                        {highThreshold !== null && chartData && (
+                            <p className="text-xs text-green-600 dark:text-green-400 font-semibold mt-1">
+                                {(highRegionCount ?? 0).toLocaleString()} users in region
+                            </p>
+                        )}
                     </div>
                 </div>
 
@@ -787,10 +813,6 @@ export default function RatingPatternsPage() {
 
                         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm space-y-3">
                             <div className="flex flex-wrap gap-6 text-sm">
-                                <div>
-                                    <span className="text-gray-400 font-semibold uppercase text-xs">Users plotted</span>
-                                    <p className="text-lg font-bold">{chartData.count.toLocaleString()}</p>
-                                </div>
                                 <div>
                                     <span className="text-gray-400 font-semibold uppercase text-xs">Pearson r</span>
                                     <p className="text-lg font-bold">
