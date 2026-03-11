@@ -612,16 +612,20 @@ export default function RatingPatternsPage() {
                         <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
                             Low Rating Region (&lt;=)
                         </label>
-                        <select
+                        <input
+                            type="number"
+                            min={0.5}
+                            max={5}
+                            step={0.5}
+                            list="rating-steps"
+                            placeholder="None"
                             value={lowThreshold ?? ''}
-                            onChange={(e) => setLowThreshold(e.target.value === '' ? null : parseFloat(e.target.value))}
+                            onChange={(e) => {
+                                const v = e.target.value;
+                                setLowThreshold(v === '' ? null : Math.min(5, Math.max(0.5, parseFloat(v) || 0.5)));
+                            }}
                             className="w-24 px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
-                        >
-                            <option value="">None</option>
-                            {RATING_STEPS.map((v) => (
-                                <option key={v} value={v}>{v}</option>
-                            ))}
-                        </select>
+                        />
                         {lowThreshold !== null && chartData && (
                             <p className="text-xs text-red-600 dark:text-red-400 font-semibold mt-1">
                                 {(lowRegionCount ?? 0).toLocaleString()} users in region
@@ -634,22 +638,33 @@ export default function RatingPatternsPage() {
                         <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
                             High Rating Region (&gt;=)
                         </label>
-                        <select
+                        <input
+                            type="number"
+                            min={0.5}
+                            max={5}
+                            step={0.5}
+                            list="rating-steps"
+                            placeholder="None"
                             value={highThreshold ?? ''}
-                            onChange={(e) => setHighThreshold(e.target.value === '' ? null : parseFloat(e.target.value))}
+                            onChange={(e) => {
+                                const v = e.target.value;
+                                setHighThreshold(v === '' ? null : Math.min(5, Math.max(0.5, parseFloat(v) || 0.5)));
+                            }}
                             className="w-24 px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
-                        >
-                            <option value="">None</option>
-                            {RATING_STEPS.map((v) => (
-                                <option key={v} value={v}>{v}</option>
-                            ))}
-                        </select>
+                        />
                         {highThreshold !== null && chartData && (
                             <p className="text-xs text-green-600 dark:text-green-400 font-semibold mt-1">
                                 {(highRegionCount ?? 0).toLocaleString()} users in region
                             </p>
                         )}
                     </div>
+
+                    {/* Shared datalist for threshold inputs */}
+                    <datalist id="rating-steps">
+                        {RATING_STEPS.map((v) => (
+                            <option key={v} value={v} />
+                        ))}
+                    </datalist>
                 </div>
 
                 {hasOverlap && (
