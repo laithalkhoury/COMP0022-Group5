@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { MovieSummary } from '@/types/dto';
+import AddToCollectionPopup from './AddToCollectionPopup';
 
 interface MovieCardProps {
     movie: MovieSummary;
     searchedTag?: string;
-    onAddToPlanner: () => void;
 }
 
 const FALLBACK_POSTER =
@@ -31,7 +32,10 @@ function StarRating({ rating }: { rating: number }) {
     );
 }
 
-export default function MovieCard({ movie, searchedTag, onAddToPlanner }: MovieCardProps) {
+export default function MovieCard({ movie, searchedTag }: MovieCardProps) {
+    const [showPopup, setShowPopup] = useState(false);
+    const isLoggedIn = !!localStorage.getItem('token');
+
     return (
         <div className="flex gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm hover:shadow-md transition-shadow">
             <img
@@ -42,7 +46,7 @@ export default function MovieCard({ movie, searchedTag, onAddToPlanner }: MovieC
             />
 
             <div className="flex flex-col gap-2 flex-1 min-w-0">
-                {/* Title + planner button */}
+                {/* Title + collection button */}
                 <div className="flex items-start justify-between gap-2">
                     <Link
                         to={`/movie/${movie.id}`}
@@ -50,14 +54,24 @@ export default function MovieCard({ movie, searchedTag, onAddToPlanner }: MovieC
                     >
                         {movie.title}
                     </Link>
-                    <button
-                        onClick={onAddToPlanner}
-                        title="Save to collection"
-                        aria-label="Save to collection"
-                        className="flex-shrink-0 p-1 text-gray-400 hover:text-yellow-500 transition-colors text-lg leading-none"
-                    >
-                        ☆
-                    </button>
+                    {isLoggedIn && (
+                        <div className="relative flex-shrink-0">
+                            <button
+                                onClick={() => setShowPopup((v) => !v)}
+                                title="Save to collection"
+                                aria-label="Save to collection"
+                                className="p-1 text-gray-400 hover:text-yellow-500 transition-colors text-lg leading-none"
+                            >
+                                ☆
+                            </button>
+                            {showPopup && (
+                                <AddToCollectionPopup
+                                    movieId={Number(movie.id)}
+                                    onClose={() => setShowPopup(false)}
+                                />
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Year + runtime */}

@@ -2,8 +2,8 @@ import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import Layout from './Layout';
 import MoviesListPage from '@/pages/MoviesListPage';
 import MovieDetailPage from '@/pages/MovieDetailPage';
-import PlaceholderPage from '@/pages/PlaceholderPage';
 import PredictiveRatingsPage from '@/pages/PredictiveRatingsPage';
+import UserMoviePage from '@/pages/UserMoviePage';
 import RatingPatternsPage from '@/pages/RatingPatternsPage';
 import ReportsPage from '@/pages/ReportsPage';
 import LoginPage from '@/pages/LoginPage';
@@ -19,7 +19,7 @@ const router = createBrowserRouter([
             { path: 'predict', element: <PredictiveRatingsPage /> },
             { path: 'rating-patterns', element: <RatingPatternsPage /> },
             { path: 'reports', element: <ReportsPage /> },
-            { path: 'planner', element: <PlaceholderPage title="Planner" /> },
+            { path: 'user-movies', element: <UserMoviePage /> },
             { path: 'login', element: <LoginPage /> },
         ],
     },

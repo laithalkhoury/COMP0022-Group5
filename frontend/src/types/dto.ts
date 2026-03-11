@@ -151,3 +151,17 @@ export interface NicheInsight {
     target_persona_traits: PersonalityTraits;
     niche_strength: number;
 }
+
+// User Movie Collections (Requirement 6)
+export interface CollectionSummary {
+    collectionId: number;
+    collectionName: string;
+    notes: string | null;
+    sortOrder: number;
+    movieCount: number;
+}
+
+export interface CollectionMovie extends MovieSummary {
+    addedAt: string;
+    sortOrder: number;
+}

@@ -8,7 +8,6 @@ import { saveScroll, restoreScroll } from '@/utils/scrollRestore';
 import FiltersBar from '@/components/FiltersBar';
 import MovieCard from '@/components/MovieCard';
 import Pagination from '@/components/Pagination';
-import Toast from '@/components/Toast';
 import { ErrorPanel, EmptyState, CardSkeleton } from '@/components/ui';
 
 export default function MoviesListPage() {
@@ -23,7 +22,6 @@ export default function MoviesListPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
-    const [toastVisible, setToastVisible] = useState(false);
     const hasRestoredScroll = useRef(false);
 
     // Fetch filter options once on mount
@@ -154,7 +152,6 @@ export default function MoviesListPage() {
                             key={movie.id}
                             movie={movie}
                             searchedTag={currentParams.tag}
-                            onAddToPlanner={() => setToastVisible(true)}
                         />
                     ))}
             </div>
@@ -167,12 +164,6 @@ export default function MoviesListPage() {
                 />
             )}
 
-            {toastVisible && (
-                <Toast
-                    message="Collection planner coming soon — stay tuned."
-                    onClose={() => setToastVisible(false)}
-                />
-            )}
         </div>
     );
 }

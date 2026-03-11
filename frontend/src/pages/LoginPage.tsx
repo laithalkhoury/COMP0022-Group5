@@ -28,7 +28,7 @@ export default function LoginPage() {
             if (isLogin && data.token) {
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('username', data.username);
-                navigate('/planner');
+                navigate('/user-movies');
             } else {
                 setIsLogin(true);
                 setError('Account created! Please log in.');

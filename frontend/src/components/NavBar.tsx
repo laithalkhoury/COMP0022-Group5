@@ -6,7 +6,7 @@ const links = [
     { to: '/reports', label: 'Reports' },
     { to: '/predict', label: 'Predict' },
     { to: '/rating-patterns', label: 'Rating Patterns' },
-    { to: '/planner', label: 'Planner' },
+    { to: '/user-movies', label: 'User Movies' },
 ];
 
 export default function NavBar() {
