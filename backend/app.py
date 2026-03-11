@@ -23,7 +23,7 @@ CORS(app)
 
 app.register_blueprint(movies_bp)
 app.register_blueprint(filters_bp)
-app.register_blueprint(reports_bp)
+app.register_blueprint(reports_bp, url_prefix='/api/genres')
 app.register_blueprint(predictions_bp)
 app.register_blueprint(personality_bp)
 app.register_blueprint(planner_bp)
