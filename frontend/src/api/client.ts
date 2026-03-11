@@ -30,15 +30,32 @@ function buildQueryString(params: Record<string, unknown>): string {
 
 export async function apiFetch<T>(
     path: string,
-    params?: Record<string, unknown>
+    params?: Record<string, unknown>,
+    method: 'GET' | 'POST' = 'GET',
+    body?: any
 ): Promise<T> {
     const qs = params ? buildQueryString(params) : '';
     const url = `${BASE_URL}${path}${qs}`;
+    
+    const token = localStorage.getItem('token');
+    const headers: Record<string, string> = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+    };
+
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(url, {
-        headers: { Accept: 'application/json' },
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
     });
+
     if (!response.ok) {
-        throw new ApiError(response.status, `HTTP ${response.status}: ${response.statusText}`);
+        const errData = await response.json().catch(() => ({}));
+        throw new ApiError(response.status, errData.error || `HTTP ${response.status}`);
     }
     return response.json() as Promise<T>;
 }
