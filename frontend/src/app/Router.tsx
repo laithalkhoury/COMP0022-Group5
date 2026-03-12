@@ -4,6 +4,7 @@ import MoviesListPage from '@/pages/MoviesListPage';
 import MovieDetailPage from '@/pages/MovieDetailPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 import PredictiveRatingsPage from '@/pages/PredictiveRatingsPage';
+import PersonalityPage from '@/pages/PersonalityPage';
 
 const router = createBrowserRouter([
     {
@@ -14,6 +15,7 @@ const router = createBrowserRouter([
             { path: 'movies', element: <MoviesListPage /> },
             { path: 'movie/:id', element: <MovieDetailPage /> },
             { path: 'predict', element: <PredictiveRatingsPage /> },
+            { path: 'personality', element: <PersonalityPage /> },
             { path: 'reports', element: <PlaceholderPage title="Reports" /> },
             { path: 'planner', element: <PlaceholderPage title="Planner" /> },
             { path: 'login', element: <PlaceholderPage title="Login" /> },
