@@ -249,6 +249,9 @@ def run_personality_etl():
     df = pd.read_csv(f'{FOLDER_PATH}/personality-data.csv')
     df.columns = df.columns.str.strip()
 
+    # Map MovieLens IDs -> IMDb IDs (Movie.movie_id uses IMDb IDs)
+    ml_to_imdb = load_movielens_to_imdb_map()
+
     # Pre-load valid movie IDs to avoid FK violations
     cur.execute("SELECT movie_id FROM Movie")
     valid_movie_ids = {row[0] for row in cur.fetchall()}
@@ -264,14 +267,16 @@ def run_personality_etl():
         )
 
         for rank in range(1, 13):
-            movie_id = row[f'movie_{rank}']
+            ml_movie_id = row[f'movie_{rank}']
             predicted_rating = row[f'predicted_rating_{rank}']
-            if pd.notna(movie_id) and pd.notna(predicted_rating) and int(movie_id) in valid_movie_ids:
-                cur.execute(
-                    """INSERT INTO Person_User_Recommendation (person_user_id, rank_position, movie_id, predicted_rating)
-                       VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING""",
-                    (row['userid'].strip(), rank, int(movie_id), float(predicted_rating))
-                )
+            if pd.notna(ml_movie_id) and pd.notna(predicted_rating):
+                imdb_id = ml_to_imdb.get(int(ml_movie_id))
+                if imdb_id and imdb_id in valid_movie_ids:
+                    cur.execute(
+                        """INSERT INTO Person_User_Recommendation (person_user_id, rank_position, movie_id, predicted_rating)
+                           VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING""",
+                        (row['userid'].strip(), rank, imdb_id, float(predicted_rating))
+                    )
 
     conn.commit()
     cur.close()
