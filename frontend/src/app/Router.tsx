@@ -5,6 +5,9 @@ import MovieDetailPage from '@/pages/MovieDetailPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 import PredictiveRatingsPage from '@/pages/PredictiveRatingsPage';
 import PersonalityPage from '@/pages/PersonalityPage';
+import RatingPatternsPage from '@/pages/RatingPatternsPage';
+import ReportsPage from '@/pages/ReportsPage';
+import LoginPage from '@/pages/LoginPage';
 
 const router = createBrowserRouter([
     {
@@ -17,8 +20,10 @@ const router = createBrowserRouter([
             { path: 'predict', element: <PredictiveRatingsPage /> },
             { path: 'personality', element: <PersonalityPage /> },
             { path: 'reports', element: <PlaceholderPage title="Reports" /> },
+            { path: 'rating-patterns', element: <RatingPatternsPage /> },
+            { path: 'reports', element: <ReportsPage /> },
             { path: 'planner', element: <PlaceholderPage title="Planner" /> },
-            { path: 'login', element: <PlaceholderPage title="Login" /> },
+            { path: 'login', element: <LoginPage /> },
         ],
     },
 ]);

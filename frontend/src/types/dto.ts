@@ -74,3 +74,80 @@ export interface PredictionResponse {
         poster_url: string | null;
     }[];
 }
+
+export interface ScatterPoint {
+    movieRating: number;
+    genreAvgRating: number;
+}
+
+export interface ScatterResponse {
+    movieTitle: string;
+    genres: string[];
+    points: ScatterPoint[];
+    count: number;
+    correlation: number | null;
+}
+
+export interface MovieSearchResult {
+    movieId: number;
+    title: string;
+    year: number;
+    genres: string[];
+}
+
+export interface GenreScatterPoint {
+    xAvgRating: number;
+    yAvgRating: number;
+}
+
+export interface GenreVsGenreResponse {
+    genresX: string[];
+    genresY: string[];
+    points: GenreScatterPoint[];
+    count: number;
+    correlation: number | null;
+    minRatings: number;
+}
+
+export interface PreferenceGenreEntry {
+    genreCombination: string;
+    avgRating: number;
+    numUsers: number;
+}
+
+export interface PreferenceAnalysisResponse {
+    thresholdType: 'low' | 'high';
+    thresholdValue: number;
+    combinationType: 'single' | 'pair';
+    entries: PreferenceGenreEntry[];
+}
+// requirement 2 types
+export interface GenrePopularity {
+    genre: string;
+    movie_count: number;
+    engagement_volume: number;
+    average_rating: number;
+    commercial_indicator: number;
+}
+
+export interface GenrePolarization {
+    genre: string;
+    sample_size: number;
+    standard_deviation: number;
+    love_hate_ratio: number;
+    status: 'Highly Polarizing' | 'Consensus';
+}
+
+export interface PersonalityTraits {
+    openness: number;
+    extraversion: number;
+    emotional_stability: number;
+    agreeableness: number;
+    conscientiousness: number;
+}
+
+export interface NicheInsight {
+    genre: string;
+    target_persona_traits: PersonalityTraits;
+    niche_strength: number;
+}

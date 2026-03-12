@@ -57,7 +57,6 @@ CREATE TABLE App_User (
     app_user_id BIGSERIAL PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL
 );
 
 CREATE TABLE ML_User (
