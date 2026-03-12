@@ -70,6 +70,7 @@ export interface PredictionResponse {
     confidence: 'High' | 'Moderate' | 'Low';
     message?: string;
     top_peers: {
+        id: number;
         title: string;
         poster_url: string | null;
     }[];
