@@ -5,6 +5,7 @@ const links = [
     { to: '/movies', label: 'Dashboard' },
     { to: '/reports', label: 'Reports' },
     { to: '/predict', label: 'Predict' },
+    { to: '/personality', label: 'Viewing Preferences' },
     { to: '/rating-patterns', label: 'Rating Patterns' },
     { to: '/user-movies', label: 'User Movies' },
 ];

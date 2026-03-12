@@ -3,6 +3,7 @@ import Layout from './Layout';
 import MoviesListPage from '@/pages/MoviesListPage';
 import MovieDetailPage from '@/pages/MovieDetailPage';
 import PredictiveRatingsPage from '@/pages/PredictiveRatingsPage';
+import PersonalityPage from '@/pages/PersonalityPage';
 import UserMoviePage from '@/pages/UserMoviePage';
 import RatingPatternsPage from '@/pages/RatingPatternsPage';
 import ReportsPage from '@/pages/ReportsPage';
@@ -17,6 +18,8 @@ const router = createBrowserRouter([
             { path: 'movies', element: <MoviesListPage /> },
             { path: 'movie/:id', element: <MovieDetailPage /> },
             { path: 'predict', element: <PredictiveRatingsPage /> },
+            { path: 'personality', element: <PersonalityPage /> },
+            { path: 'reports', element: <PlaceholderPage title="Reports" /> },
             { path: 'rating-patterns', element: <RatingPatternsPage /> },
             { path: 'reports', element: <ReportsPage /> },
             { path: 'user-movies', element: <UserMoviePage /> },
