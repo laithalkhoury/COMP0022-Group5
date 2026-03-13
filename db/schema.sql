@@ -146,13 +146,15 @@ CREATE TABLE Person_User_Recommendation (
 );
 
 -- =========================
--- Planner tables (Requirement 6)
+-- User Movie Collection tables (Requirement 6)
 -- =========================
 
 CREATE TABLE Collection_List (
   collection_id    BIGSERIAL PRIMARY KEY,
   app_user_id      BIGINT NOT NULL,
   collection_name  TEXT NOT NULL,
+  notes            TEXT,
+  sort_order       INT NOT NULL DEFAULT 0,
   created_at       TIMESTAMP NOT NULL,
   updated_at       TIMESTAMP NOT NULL,
   CONSTRAINT fk_collection_list_app_user
@@ -165,7 +167,7 @@ CREATE TABLE List_Item (
   collection_id  BIGINT NOT NULL,
   movie_id       INT NOT NULL,
   added_at       TIMESTAMP NOT NULL,
-  note           TEXT,
+  sort_order     INT NOT NULL DEFAULT 0,
   PRIMARY KEY (collection_id, movie_id),
   CONSTRAINT fk_list_item_collection
     FOREIGN KEY (collection_id)

@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getFilterOptions } from '@/api/filters';
 import { getPrediction } from '@/api/predictions';
 import type { FilterOptions, PredictionResponse } from '@/types/dto';
 import { Spinner, ErrorPanel } from '@/components/ui';
 
 export default function PredictiveRatingsPage() {
+    const navigate = useNavigate();
     const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
     const [loadingOptions, setLoadingOptions] = useState(true);
     
@@ -185,8 +187,8 @@ export default function PredictiveRatingsPage() {
                                 <h3 className="text-lg font-bold px-2">Top 5 Peer Films Influencing Prediction</h3>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-6">
                                     {prediction.top_peers.map((peer, idx) => (
-                                        <div key={idx} className="flex flex-col space-y-3">
-                                            <div className="w-full aspect-[2/3] rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
+                                        <div key={idx} className="flex flex-col space-y-3 cursor-pointer group" onClick={() => navigate(`/movie/${peer.id}`)}>
+                                            <div className="w-full aspect-[2/3] rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm group-hover:ring-2 group-hover:ring-blue-500 transition-all">
                                                 {peer.poster_url ? (
                                                     <img 
                                                         src={peer.poster_url} 
@@ -197,7 +199,7 @@ export default function PredictiveRatingsPage() {
                                                     <div className="w-full h-full flex items-center justify-center text-gray-400 text-[10px] text-center p-2 uppercase">No Poster</div>
                                                 )}
                                             </div>
-                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300 line-clamp-2 leading-tight">{peer.title}</p>
+                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300 line-clamp-2 leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400">{peer.title}</p>
                                         </div>
                                     ))}
                                 </div>

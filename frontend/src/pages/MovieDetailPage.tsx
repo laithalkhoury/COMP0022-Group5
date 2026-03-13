@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getMovie } from '@/api/movies';
 import type { MovieDetail, CrewMember } from '@/types/dto';
 import { ErrorPanel, DetailSkeleton } from '@/components/ui';
+import AddToCollectionPopup from '@/components/AddToCollectionPopup';
 
 const FALLBACK_POSTER = 'https://placehold.co/300x450?text=No+Image';
 
@@ -124,6 +125,8 @@ export default function MovieDetailPage() {
     const [movie, setMovie] = useState<MovieDetail | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [showCollectionPopup, setShowCollectionPopup] = useState(false);
+    const isLoggedIn = !!localStorage.getItem('token');
 
     const fetchData = useCallback(async () => {
         if (!id) return;
@@ -170,7 +173,27 @@ export default function MovieDetailPage() {
                 {/* Details */}
                 <div className="flex-1 space-y-4">
                     <div>
-                        <h1 className="text-3xl font-bold leading-tight">{movie.title}</h1>
+                        <div className="flex items-start justify-between gap-3">
+                            <h1 className="text-3xl font-bold leading-tight">{movie.title}</h1>
+                            {isLoggedIn && (
+                                <div className="relative flex-shrink-0 mt-1">
+                                    <button
+                                        onClick={() => setShowCollectionPopup((v) => !v)}
+                                        title="Save to collection"
+                                        aria-label="Save to collection"
+                                        className="p-1.5 text-gray-400 hover:text-yellow-500 transition-colors text-2xl leading-none"
+                                    >
+                                        ☆
+                                    </button>
+                                    {showCollectionPopup && (
+                                        <AddToCollectionPopup
+                                            movieId={Number(movie.id)}
+                                            onClose={() => setShowCollectionPopup(false)}
+                                        />
+                                    )}
+                                </div>
+                            )}
+                        </div>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm text-gray-500 dark:text-gray-400">
                             <span className="font-medium">{movie.year}</span>
                             {movie.runtime != null && (

@@ -73,7 +73,7 @@ def predict_movie_performance():
             JOIN PeerMovies pm ON r.movie_id = pm.movie_id
         ),
         Top5Peers AS (
-            SELECT title, poster_url
+            SELECT movie_id AS id, title, poster_url
             FROM PeerMovies 
             LIMIT 5
         )

@@ -31,7 +31,7 @@ function buildQueryString(params: Record<string, unknown>): string {
 export async function apiFetch<T>(
     path: string,
     params?: Record<string, unknown>,
-    method: 'GET' | 'POST' = 'GET',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
     body?: any
 ): Promise<T> {
     const qs = params ? buildQueryString(params) : '';
@@ -56,6 +56,9 @@ export async function apiFetch<T>(
     if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         throw new ApiError(response.status, errData.error || `HTTP ${response.status}`);
+    }
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+        return undefined as T;
     }
     return response.json() as Promise<T>;
 }
