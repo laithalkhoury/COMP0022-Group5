@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import type { CollectionSummary, CollectionMovie } from '@/types/dto';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import {
     getCollections,
     createCollection,
@@ -53,6 +54,7 @@ function Sidebar({ collections, selectedId, onSelect, onCreate, onRename, onDele
     const [newName, setNewName] = useState('');
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editName, setEditName] = useState('');
+    const [deleteTarget, setDeleteTarget] = useState<CollectionSummary | null>(null);
     const dragItem = useRef<number | null>(null);
     const dragOver = useRef<number | null>(null);
 
@@ -89,6 +91,7 @@ function Sidebar({ collections, selectedId, onSelect, onCreate, onRename, onDele
     }
 
     return (
+        <>
         <div className="w-[280px] flex-shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col bg-gray-50 dark:bg-gray-900">
             <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">My Collections</h2>
@@ -187,9 +190,7 @@ function Sidebar({ collections, selectedId, onSelect, onCreate, onRename, onDele
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if (confirm(`Delete "${col.collectionName}"?`)) {
-                                                onDelete(col.collectionId);
-                                            }
+                                            setDeleteTarget(col);
                                         }}
                                         className="p-1 text-gray-400 hover:text-red-600 transition-colors text-xs"
                                         title="Delete"
@@ -203,6 +204,19 @@ function Sidebar({ collections, selectedId, onSelect, onCreate, onRename, onDele
                 ))}
             </div>
         </div>
+
+        {deleteTarget && (
+            <ConfirmDialog
+                title="Delete collection"
+                message={`"${deleteTarget.collectionName}" and all its items will be permanently deleted.`}
+                onConfirm={() => {
+                    onDelete(deleteTarget.collectionId);
+                    setDeleteTarget(null);
+                }}
+                onCancel={() => setDeleteTarget(null)}
+            />
+        )}
+        </>
     );
 }
 
@@ -218,6 +232,7 @@ interface CollectionDetailProps {
 
 function CollectionDetail({ collection, movies, onUpdateNotes, onRemoveMovie, onReorderMovies }: CollectionDetailProps) {
     const [notes, setNotes] = useState(collection.notes ?? '');
+    const [removeTarget, setRemoveTarget] = useState<CollectionMovie | null>(null);
     const dragItem = useRef<number | null>(null);
     const dragOver = useRef<number | null>(null);
 
@@ -244,6 +259,7 @@ function CollectionDetail({ collection, movies, onUpdateNotes, onRemoveMovie, on
     }
 
     return (
+        <>
         <div className="flex-1 overflow-y-auto p-6">
             <div className="max-w-4xl">
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
@@ -294,11 +310,7 @@ function CollectionDetail({ collection, movies, onUpdateNotes, onRemoveMovie, on
                                             {movie.title}
                                         </Link>
                                         <button
-                                            onClick={() => {
-                                                if (confirm(`Remove "${movie.title}" from this collection?`)) {
-                                                    onRemoveMovie(Number(movie.id));
-                                                }
-                                            }}
+                                            onClick={() => setRemoveTarget(movie)}
                                             className="flex-shrink-0 p-1 text-gray-300 hover:text-red-500 transition-colors text-sm leading-none opacity-0 group-hover:opacity-100"
                                             title="Remove from collection"
                                         >
@@ -348,6 +360,20 @@ function CollectionDetail({ collection, movies, onUpdateNotes, onRemoveMovie, on
                 )}
             </div>
         </div>
+
+        {removeTarget && (
+            <ConfirmDialog
+                title="Remove movie"
+                message={`"${removeTarget.title}" will be removed from this collection.`}
+                confirmLabel="Remove"
+                onConfirm={() => {
+                    onRemoveMovie(Number(removeTarget.id));
+                    setRemoveTarget(null);
+                }}
+                onCancel={() => setRemoveTarget(null)}
+            />
+        )}
+        </>
     );
 }
 

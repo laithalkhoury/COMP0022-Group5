@@ -27,18 +27,35 @@ const DEFAULT_TRAITS: PersonalityTraits = {
     emotional_stability: 4,
 };
 
+function loadSession<T>(key: string, fallback: T): T {
+    try {
+        const raw = sessionStorage.getItem(key);
+        return raw ? (JSON.parse(raw) as T) : fallback;
+    } catch {
+        return fallback;
+    }
+}
+
 export default function PersonalityPage() {
     const [genreData, setGenreData] = useState<GenreTraitData[]>([]);
     const [loadingChart, setLoadingChart] = useState(true);
     const [chartError, setChartError] = useState<string | null>(null);
 
-    const [activeTraits, setActiveTraits] = useState<(keyof PersonalityTraits)[]>(['openness']);
+    const [activeTraits, setActiveTraits] = useState<(keyof PersonalityTraits)[]>(() =>
+        loadSession('personality_activeTraits', ['openness'] as (keyof PersonalityTraits)[])
+    );
 
-    const [traits, setTraits] = useState<PersonalityTraits>(DEFAULT_TRAITS);
-    const [movies, setMovies] = useState<PersonalityMovie[]>([]);
+    const [traits, setTraits] = useState<PersonalityTraits>(() =>
+        loadSession('personality_traits', DEFAULT_TRAITS)
+    );
+    const [movies, setMovies] = useState<PersonalityMovie[]>(() =>
+        loadSession('personality_movies', [] as PersonalityMovie[])
+    );
     const [loadingRecs, setLoadingRecs] = useState(false);
     const [recError, setRecError] = useState<string | null>(null);
-    const [hasSearched, setHasSearched] = useState(false);
+    const [hasSearched, setHasSearched] = useState(() =>
+        loadSession('personality_hasSearched', false)
+    );
 
     useEffect(() => {
         getGenreTraits()
@@ -46,6 +63,19 @@ export default function PersonalityPage() {
             .catch(() => setChartError('Failed to load genre trait data'))
             .finally(() => setLoadingChart(false));
     }, []);
+
+    useEffect(() => {
+        sessionStorage.setItem('personality_traits', JSON.stringify(traits));
+    }, [traits]);
+
+    useEffect(() => {
+        sessionStorage.setItem('personality_movies', JSON.stringify(movies));
+        sessionStorage.setItem('personality_hasSearched', JSON.stringify(hasSearched));
+    }, [movies, hasSearched]);
+
+    useEffect(() => {
+        sessionStorage.setItem('personality_activeTraits', JSON.stringify(activeTraits));
+    }, [activeTraits]);
 
     const handleSlider = (trait: keyof PersonalityTraits, value: number) => {
         setTraits(prev => ({ ...prev, [trait]: value }));

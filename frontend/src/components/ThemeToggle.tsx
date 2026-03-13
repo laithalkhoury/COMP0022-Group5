@@ -1,19 +1,21 @@
 import { useState, useEffect } from 'react';
 
 export default function ThemeToggle() {
-    const [isDark, setIsDark] = useState(false);
+    const [isDark, setIsDark] = useState(() => {
+        const saved = localStorage.getItem('theme');
+        return saved ? saved === 'dark' : document.documentElement.classList.contains('dark');
+    });
 
     useEffect(() => {
-        setIsDark(document.documentElement.classList.contains('dark'));
-    }, []);
+        if (isDark) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    }, [isDark]);
 
     function toggle() {
-        const html = document.documentElement;
-        if (isDark) {
-            html.classList.remove('dark');
-        } else {
-            html.classList.add('dark');
-        }
         setIsDark(!isDark);
     }
 

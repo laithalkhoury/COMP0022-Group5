@@ -7,7 +7,7 @@ const links = [
     { to: '/predict', label: 'Predict' },
     { to: '/personality', label: 'Viewing Preferences' },
     { to: '/rating-patterns', label: 'Rating Patterns' },
-    { to: '/user-movies', label: 'User Movies' },
+    { to: '/user-movies', label: 'My Movies' },
 ];
 
 export default function NavBar() {
