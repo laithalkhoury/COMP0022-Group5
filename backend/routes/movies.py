@@ -149,7 +149,7 @@ def search_movies():
         sort_map = {
             'rating': 'r_stats.avg_rating',
             'year': 'm.release_year',
-            'popularity': 'r_stats.rating_count',
+            'popularity': 'COALESCE(r_stats.rating_count, 0)',
         }
         sort_column = sort_map.get(sort_by, 'm.release_year')
         sort_direction = 'ASC' if sort_dir == 'asc' else 'DESC'
