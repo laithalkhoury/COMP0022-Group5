@@ -19,7 +19,6 @@ const router = createBrowserRouter([
             { path: 'movie/:id', element: <MovieDetailPage /> },
             { path: 'predict', element: <PredictiveRatingsPage /> },
             { path: 'personality', element: <PersonalityPage /> },
-            { path: 'reports', element: <PlaceholderPage title="Reports" /> },
             { path: 'rating-patterns', element: <RatingPatternsPage /> },
             { path: 'reports', element: <ReportsPage /> },
             { path: 'planner', element: <PlaceholderPage title="Planner" /> },
