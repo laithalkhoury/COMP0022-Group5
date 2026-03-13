@@ -22,7 +22,7 @@ export default function MoviesListPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
-    const hasRestoredScroll = useRef(false);
+    const hasRestoredScroll = useRef<boolean>(false);
 
     // Fetch filter options once on mount
     useEffect(() => {

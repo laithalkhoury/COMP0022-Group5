@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import {
     getGenreTraits,
@@ -164,7 +164,7 @@ export default function PersonalityPage() {
                             />
                             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(2)} />
                             <Tooltip
-                                formatter={(val: number) => [val.toFixed(3) + ' σ', '']}
+                                formatter={(val) => [(val as number).toFixed(3) + ' σ', '']}
                                 contentStyle={{ fontSize: 12 }}
                             />
                             {TRAITS.filter(t => activeTraits.includes(t.key)).map(t => (

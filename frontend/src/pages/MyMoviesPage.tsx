@@ -389,7 +389,7 @@ export default function UserMoviePage() {
     const [movies, setMovies] = useState<CollectionMovie[]>([]);
     const [loading, setLoading] = useState(true);
     const [moviesLoading, setMoviesLoading] = useState(false);
-    const reorderTimeout = useRef<ReturnType<typeof setTimeout>>();
+    const reorderTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
     // Auth guard
     useEffect(() => {
