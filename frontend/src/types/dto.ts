@@ -70,6 +70,7 @@ export interface PredictionResponse {
     confidence: 'High' | 'Moderate' | 'Low';
     message?: string;
     top_peers: {
+        id: number;
         title: string;
         poster_url: string | null;
     }[];
@@ -150,4 +151,18 @@ export interface NicheInsight {
     genre: string;
     target_persona_traits: PersonalityTraits;
     niche_strength: number;
+}
+
+// User Movie Collections (Requirement 6)
+export interface CollectionSummary {
+    collectionId: number;
+    collectionName: string;
+    notes: string | null;
+    sortOrder: number;
+    movieCount: number;
+}
+
+export interface CollectionMovie extends MovieSummary {
+    addedAt: string;
+    sortOrder: number;
 }
