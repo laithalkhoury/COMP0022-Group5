@@ -56,7 +56,7 @@ CREATE TABLE Movie_Character (
 CREATE TABLE App_User (
     app_user_id BIGSERIAL PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
+    password_hash TEXT NOT NULL
 );
 
 CREATE TABLE ML_User (
