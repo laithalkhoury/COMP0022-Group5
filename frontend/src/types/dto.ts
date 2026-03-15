@@ -148,6 +148,12 @@ export interface GenreFinancials {
     roi_percentage: number;
 }
 
+export interface GenreAwards {
+    genre: string;
+    wins: number;
+    nominations: number;
+}
+
 export interface PersonalityTraits {
     openness: number;
     extraversion: number;

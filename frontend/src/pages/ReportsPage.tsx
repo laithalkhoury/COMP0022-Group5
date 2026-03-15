@@ -3,13 +3,14 @@ import {
     ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, 
     Radar, RadarChart, PolarGrid, PolarAngleAxis, BarChart, Bar, Cell, 
     ReferenceLine,
-    PolarRadiusAxis
+    PolarRadiusAxis,
+    Legend
 } from 'recharts';
-import { Info, TrendingUp, Zap, Users, DollarSign, BarChart3 } from 'lucide-react';
+import { Info, TrendingUp, Zap, Users, DollarSign, Trophy } from 'lucide-react';
 import { Spinner, ErrorPanel } from '@/components/ui';
 
-import { getGenrePopularity, getGenrePolarization, getNicheInsights, getGenreFinancials } from '@/api/reports';
-import type { GenrePopularity, GenrePolarization, NicheInsight, GenreFinancials } from '@/types/dto';
+import { getGenrePopularity, getGenrePolarization, getNicheInsights, getGenreFinancials, getGenreAwards } from '@/api/reports';
+import type { GenrePopularity, GenrePolarization, NicheInsight, GenreFinancials, GenreAwards } from '@/types/dto';
 import GenreTooltip from '@/components/GenreTooltip';
 import NicheTooltip from '@/components/NicheTooltip';
 
@@ -35,17 +36,25 @@ export default function GenreAnalysisPage() {
     const [financialData, setFinancialData] = useState<GenreFinancials[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [awardData, setAwardData] = useState<GenreAwards[]>([]);
 
     // For the Radar Chart detail view
     const [selectedNicheGenre, setSelectedNicheGenre] = useState<string | null>(null);
 
     useEffect(() => {
-        Promise.all([getGenrePopularity(), getGenrePolarization(), getNicheInsights(), getGenreFinancials()])
-            .then(([pop, pol, niche, fin]) => {
+        Promise.all([
+            getGenrePopularity(), 
+            getGenrePolarization(), 
+            getNicheInsights(), 
+            getGenreFinancials(),
+            getGenreAwards()
+        ])
+            .then(([pop, pol, niche, fin, awn]) => {
                 setPopularityData(pop);
                 setPolarizationData(pol);
                 setNicheData(niche);
                 setFinancialData(fin);
+                setAwardData(awn);
                 if (niche.length > 0) setSelectedNicheGenre(niche[0].genre);
             })
             .catch(err => setError(err.message))
@@ -105,8 +114,6 @@ export default function GenreAnalysisPage() {
                 
                 {/* 1. POPULARITY SECTION */}
         <div className="lg:col-span-2 space-y-4">
-            
-            {/* KPI Row: Quick stats to complement the chart */}
             <div className="grid grid-cols-3 gap-4">
                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
                     <p className="text-xs text-gray-500 uppercase font-bold">Total Genres</p>
@@ -216,7 +223,7 @@ export default function GenreAnalysisPage() {
                     </p>
                 </div>
 
-                                        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
                     <h2 className="text-lg font-bold flex items-center gap-2 mb-6">
                         <DollarSign className="w-5 h-5 text-green-500" />
                         Commercial ROI (%)
@@ -248,8 +255,27 @@ export default function GenreAnalysisPage() {
                                 />
                                 
                                 <Tooltip 
-                                    formatter={(value: any) => [`${value}% ROI`, 'Profitability'] as [string, string]}
-                                    contentStyle={{ borderRadius: '8px' }}
+                                    formatter={(value: any, _name: any, props: any) => {
+                                        const avgRev = props.payload.average_revenue;
+                                        
+                                        return [
+                                            (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-green-600 font-black">{value}% ROI</span>
+                                                    <span className="text-gray-500 text-[10px] font-bold uppercase tracking-tight">
+                                                        Avg Revenue: {formatCurrency(avgRev)}
+                                                    </span>
+                                                </div>
+                                            ),
+                                            'Performance'
+                                        ] as any;
+                                    }}
+                                    contentStyle={{ 
+                                        borderRadius: '12px', 
+                                        border: 'none', 
+                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                                        padding: '12px'
+                                    }}
                                 />
 
                                 <Bar dataKey="roi_percentage" radius={[0, 4, 4, 0]}>
@@ -268,6 +294,50 @@ export default function GenreAnalysisPage() {
                         <p className="text-sm font-black text-green-600">
                             {financialData[0]?.genre}: {formatCurrency(financialData[0]?.average_revenue)}
                         </p>
+                    </div>
+                </div>
+
+                {/* AWARDS SECTION */}
+                <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h2 className="text-lg font-bold flex items-center gap-2 mb-6">
+                        <Trophy className="w-5 h-5 text-yellow-500" />
+                        Awards vs. Nominations by Genre
+                    </h2>
+
+                    <div className="h-[400px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={awardData} margin={{ bottom: 40 }}>
+                                <XAxis 
+                                    dataKey="genre" 
+                                    tick={{ fontSize: 11, fontWeight: 600 }} 
+                                    interval={0} 
+                                    angle={-45} 
+                                    textAnchor="end" 
+                                />
+                                <YAxis tick={{ fontSize: 11 }} />
+                                <Tooltip 
+                                    cursor={{fill: '#f8fafc'}}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                />
+                                <Legend verticalAlign="top" align="right" iconType="circle" />
+                                
+                                <Bar 
+                                    dataKey="wins" 
+                                    fill="#eab308" 
+                                    name="Wins" 
+                                    radius={[4, 4, 0, 0]} 
+                                    barSize={20}
+                                />
+                                
+                                <Bar 
+                                    dataKey="nominations" 
+                                    fill="#94a3b8" 
+                                    name="Nominations" 
+                                    radius={[4, 4, 0, 0]} 
+                                    barSize={20}
+                                />
+                            </BarChart>
+                        </ResponsiveContainer>
                     </div>
                 </div>
 
