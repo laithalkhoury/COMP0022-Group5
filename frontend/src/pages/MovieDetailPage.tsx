@@ -117,6 +117,61 @@ function CrewSection({ crew }: { crew: CrewMember[] }) {
     );
 }
 
+interface Award {
+    status: 'award_received' | 'nominated_for';
+    description: string;
+}
+
+function AwardSection({ awards }: { awards: Award[] | null }) {
+    // Don't render anything if there are no awards
+    if (!awards || awards.length === 0) return null;
+
+    return (
+        <section className="mt-8">
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <span className="text-yellow-500">🏆</span> 
+                Awards & Recognitions
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {awards.map((award, index) => {
+                    const isWinner = award.status === 'award_received';
+                    
+                    return (
+                        <div 
+                            key={index}
+                            className={`flex items-start gap-4 p-4 rounded-xl border transition-colors ${
+                                isWinner 
+                                ? 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800' 
+                                : 'bg-gray-50 border-gray-200 dark:bg-gray-800/40 dark:border-gray-700'
+                            }`}
+                        >
+                            {/* Icon Logic */}
+                            <div className="text-2xl mt-1">
+                                {isWinner ? '🏆' : '🎖️'}
+                            </div>
+
+                            <div className="flex-1">
+                                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                                    isWinner 
+                                    ? 'bg-yellow-200 text-yellow-800 dark:bg-yellow-700 dark:text-yellow-100' 
+                                    : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                                }`}>
+                                    {isWinner ? 'Winner' : 'Nominee'}
+                                </span>
+                                
+                                <p className="mt-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
+                                    {award.description}
+                                </p>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </section>
+    );
+}
+
 // ---- Main page ----
 
 export default function MovieDetailPage() {
@@ -127,6 +182,18 @@ export default function MovieDetailPage() {
     const [error, setError] = useState<string | null>(null);
     const [showCollectionPopup, setShowCollectionPopup] = useState(false);
     const isLoggedIn = !!localStorage.getItem('token');
+
+    const formatCurrency = (val: number | null | undefined) => {
+        if (!val || val === 0) return '—';
+        
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            // Set to 0 if you don't want decimals (e.g., $150,000,000)
+            // Set to 2 if you want cents (e.g., $150,000,000.00)
+            maximumFractionDigits: 0, 
+        }).format(val);
+    };
 
     const fetchData = useCallback(async () => {
         if (!id) return;
@@ -233,9 +300,26 @@ export default function MovieDetailPage() {
                     <dl className="pt-1">
                         <InfoRow label="Director" value={movie.director} />
                         <InfoRow label="Actors" value={movie.actors?.slice(0, 5).join(', ')} />
+
+                        {movie.box_office && (
+                            <dl>
+                                <InfoRow 
+                                    label="Budget" 
+                                    value={formatCurrency(movie.box_office.budget)} 
+                                />
+                                <InfoRow 
+                                    label="Revenue" 
+                                    value={formatCurrency(movie.box_office.revenue)} 
+                                />
+                            </dl>
+                        )}
                     </dl>
                 </div>
             </div>
+
+            {movie.awards && movie.awards.length > 0 && (
+                <AwardSection awards={movie.awards} />
+            )}
 
             {/* Crew table */}
             {movie.crew.length > 0 && <CrewSection crew={movie.crew} />}

@@ -60,6 +60,16 @@ def get_movie_details(movie_id):
         cur.execute(tag_query, (movie_id,))
         tags = [row['tag_text'] for row in cur.fetchall()]
 
+        # Get Box Office Data
+        box_office_query = "SELECT budget, revenue FROM Box_Office WHERE movie_id = %s"
+        cur.execute(box_office_query, (movie_id,))
+        box_office = cur.fetchone()
+
+        # Get Awards Data
+        award_query = "SELECT award_type, award_name FROM Award WHERE movie_id = %s"
+        cur.execute(award_query, (movie_id,))
+        award_results = cur.fetchall()
+
         movie_info = {
             "movie_id": movie['movie_id'],
             "title": movie['title'],
@@ -71,6 +81,16 @@ def get_movie_details(movie_id):
             "average_rating": float(rating_stats['avg_rating']) if rating_stats['avg_rating'] else 0.0,
             "rating_count": rating_stats['num_ratings'],
             "tags": tags,
+            "box_office": {
+                "budget": int(box_office['budget']) if box_office and box_office['budget'] else None,
+                "revenue": int(box_office['revenue']) if box_office and box_office['revenue'] else None
+            },
+            "awards": [
+                {
+                    "status": row['award_type'], # 'award_received' or 'nominated_for'
+                    "description": row['award_name']
+                } for row in award_results
+            ],
             "crew": [
                 {
                     "name": row['name'],

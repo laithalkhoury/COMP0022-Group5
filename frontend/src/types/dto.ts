@@ -20,10 +20,15 @@ export interface MovieDetail extends MovieSummary {
     tags: string[];
     director: string | null;
     actors: string[] | null;
-    awards: string[] | null;
-    boxOffice: string | number | null;
-    criticScore: number | null;
     crew: CrewMember[];
+    box_office: {
+        budget: number | null;
+        revenue: number | null;
+    } | null;
+    awards: {
+        status: 'award_received' | 'nominated_for';
+        description: string;
+    }[] | null;
 }
 
 export interface FilterOptions {

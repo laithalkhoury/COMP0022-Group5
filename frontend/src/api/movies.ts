@@ -30,6 +30,14 @@ interface BackendMovieDetail {
     rating_count: number | null;
     tags: string[];
     crew: BackendCrewMember[];
+    box_office: {
+        budget: number | null;
+        revenue: number | null;
+    } | null;
+    awards: {
+        status: 'award_received' | 'nominated_for';
+        description: string;
+    }[];
 }
 
 interface BackendSearchResponse {
@@ -89,9 +97,8 @@ function toMovieDetail(m: BackendMovieDetail): MovieDetail {
         tags: m.tags ?? [],
         director,
         actors: actors.length > 0 ? actors : null,
-        awards: null,
-        boxOffice: null,
-        criticScore: null,
+        box_office: m.box_office ?? null, 
+        awards: m.awards ?? [],
         crew,
     };
 }
