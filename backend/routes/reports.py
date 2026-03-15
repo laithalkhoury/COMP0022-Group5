@@ -228,3 +228,40 @@ def get_genre_financial_report():
     finally:
         if conn:
             conn.close()
+
+@reports_bp.route('/award-stats', methods=['GET'])
+def get_genre_award_stats():
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+        SELECT 
+            g.name as genre,
+            COUNT(CASE WHEN a.award_type = 'award_received' THEN 1 END) as wins,
+            COUNT(CASE WHEN a.award_type = 'nominated_for' THEN 1 END) as nominations
+        FROM Genre g
+        JOIN Movie_Genre mg ON g.genre_id = mg.genre_id
+        JOIN Award a ON mg.movie_id = a.movie_id
+        GROUP BY g.name
+        HAVING COUNT(a.award_id) > 0
+        ORDER BY wins DESC;
+        """
+        
+        cur.execute(query)
+        results = cur.fetchall()
+
+        award_report = []
+        for row in results:
+            award_report.append({
+                "genre": row['genre'],
+                "wins": row['wins'],
+                "nominations": row['nominations']
+            })
+
+        return jsonify(award_report), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
