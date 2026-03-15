@@ -138,40 +138,151 @@ The database content is based on an ETL pipeline implemented in `db/fill_db.py`,
 
 These sources were used to build the preloaded SQL dump included in this repository.
 
-## MovieDB Backend
+# MovieDB Backend
 
-## 🚀 Tech Stack
-*   **Language:** Python 3.11+
-*   **Framework:** Flask
-*   **Database Driver:** Psycopg2-binary
-*   **Data Processing:** Pandas / NumPy
-*   **Containerization:** Docker
+Backend service for the MovieDB analytics platform.  
+This API provides movie catalogue search, analytics reports, personality-based recommendations, predictive ratings, and user-curated collections.
 
-## 🛣 API Endpoints
+The backend is implemented using **Flask** and **PostgreSQL**, and exposes a REST API consumed by the frontend application.
 
-### 1. Movie Catalogue (Requirement 1)
-*   `GET /api/movies` — Get paginated list of movies with filters.
-*   `GET /api/movies/<id>` — Get detailed information about a specific movie, including its title, release_year, runtime, poster_url, genres, average_rating, rating_count, tags, crew. Also returns box office and awards data if applicable.
+---
 
-### 2. Market Reports (Requirement 2)
-*   `GET /api/genres/popularity-report` — Returns genre engagement and popaulriyt metrics.
-*   `GET /api/genres/polarization` — Returns volatility (standard deviation) metrics.
-*   `GET /api/genres/genre-financials` — ROI analysis and average revenue per genre.
-*   `GET /api/genres/award-stats` — Returns number of awards and nominations received for the genre.
+# 🚀 Tech Stack
+- **Framework:** Flask
+- **Database:** PostgreSQL
+- **Database Driver:** psycopg2-binary
+- **Authentication:** JWT (PyJWT) + Werkzeug password hashing
+- **Containerization:** Docker
 
-### 3. Audience Insights (Requirement 5)
-*   `GET /api/genres/personality-insights` — Psychological profiles (Big Five traits) of genre fans.
+---
 
-### 4. Curated Collections (Requirement 6)
-*   `POST /api/collections` — Create a new strategy shortlist.
-*   `GET /api/collections/<user_id>` — Retrieve saved collections.
+## API Endpoints
 
-## 🛡 Security Features
-*   **Parameterized Queries:** All database interactions use `psycopg2` placeholders to prevent **SQL Injection**.
-*   **Password Hashing:** User credentials in the `App_User` table are secured using `scrypt` hashing via `Werkzeug`.
-*   **Isolation:** The database is not exposed to the public; it only communicates with the backend via a private Docker network.
+### Authentication
 
-## 📂 Structure
-*   **/routes**: Contains the Flask Blueprints for different modules (Reports, Movies, Collections).
-*   **main.py**: Entry point for the Flask application.
-*   **requirements.txt**: Python dependency manifest.
+| Method | Endpoint | Description |
+|------|----------|-------------|
+| POST | `/api/register` | Create a new user |
+| POST | `/api/login` | Authenticate user and return JWT token |
+
+**Register request body**
+
+```json
+{
+  "username": "string",
+  "password": "string"
+}
+```
+
+**Login response**
+
+```json
+{
+  "token": "JWT_TOKEN",
+  "username": "string"
+}
+```
+
+---
+
+### Movie Catalogue
+
+| Method | Endpoint | Description |
+|------|----------|-------------|
+| GET | `/api/movies` | Search movies with filters and pagination |
+| GET | `/api/movies/<movie_id>` | Retrieve detailed information for a movie |
+
+**Search parameters**
+
+`title`, `genre`, `tag`, `crew`, `year_start`, `year_end`,  
+`min_rating`, `max_rating`, `limit`, `offset`, `sort_by`, `sort_dir`
+
+---
+
+### Filters
+
+| Method | Endpoint | Description |
+|------|----------|-------------|
+| GET | `/api/filters/options` | Retrieve available filter values |
+
+Returns available genres, tags, and other filter categories.
+
+---
+
+### Personality Insights
+
+| Method | Endpoint | Description |
+|------|----------|-------------|
+| GET | `/api/personality/genre-traits` | Get Big Five personality traits by genre |
+| POST | `/api/personality/recommendations` | Get movie recommendations based on personality |
+
+**Example request**
+
+```json
+{
+  "openness": 0.7,
+  "agreeableness": 0.6,
+  "extraversion": 0.5,
+  "conscientiousness": 0.8,
+  "emotional_stability": 0.4
+}
+```
+
+---
+
+### Predictive Ratings
+
+| Method | Endpoint | Description |
+|------|----------|-------------|
+| POST | `/api/predictions/predict` | Predict expected audience rating for a movie |
+
+**Example request**
+
+```json
+{
+  "title": "Upcoming Movie",
+  "genres": ["Action"],
+  "tags": ["space"],
+  "release_year": 2026
+}
+```
+
+---
+
+### Rating Pattern Analysis
+
+| Method | Endpoint | Description |
+|------|----------|-------------|
+| GET | `/api/rating-patterns/scatter` | Compare movie ratings vs genre preferences |
+| GET | `/api/rating-patterns/scatter-genre` | Compare ratings between two genres |
+| GET | `/api/rating-patterns/movie-search` | Search movies for analysis tools |
+| GET | `/api/rating-patterns/preference-analysis` | Analyze genre preference patterns |
+
+---
+
+### Collections (Authenticated)
+
+All collection endpoints require:
+
+```
+Authorization: Bearer <JWT_TOKEN>
+```
+
+| Method | Endpoint | Description |
+|------|----------|-------------|
+| GET | `/api/collections` | Get user collections |
+| POST | `/api/collections` | Create a collection |
+| PUT | `/api/collections/<collection_id>` | Update collection |
+| DELETE | `/api/collections/<collection_id>` | Delete collection |
+| PUT | `/api/collections/reorder` | Reorder collections |
+
+---
+
+### Movies in Collections
+
+| Method | Endpoint | Description |
+|------|----------|-------------|
+| GET | `/api/collections/<collection_id>/movies` | List movies in a collection |
+| POST | `/api/collections/<collection_id>/movies` | Add movie to collection |
+| DELETE | `/api/collections/<collection_id>/movies/<movie_id>` | Remove movie from collection |
+| PUT | `/api/collections/<collection_id>/movies/reorder` | Reorder movies |
