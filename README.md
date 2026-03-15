@@ -1,5 +1,43 @@
 # COMP0022 Group 5 Coursework
 
+# Running with Docker
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/) installed and running
+
+### Steps
+
+1. **Set up environment variables**
+
+   Edit the `.env` file in the root directory and set:
+   - `DB_PASSWORD` — any password (e.g. `postgres`)
+   - `SECRET_KEY` — any random string, or generate one with:
+     ```bash
+     python -c "import secrets; print(secrets.token_hex(32))"
+     ```
+
+2. **Start all services**
+   ```bash
+   docker compose up --build
+   ```
+   This starts the database (with data pre-loaded), backend, and frontend.
+
+3. **Open the app**
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000
+
+### Stopping
+```bash
+docker compose down
+```
+
+To also reset the database (full wipe):
+```bash
+docker compose down -v
+```
+
+---
+
 # React JS Frontend
 
 A React TypeScript frontend built with Vite, Tailwind CSS, and React Router.
