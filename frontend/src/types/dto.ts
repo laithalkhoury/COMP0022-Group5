@@ -139,6 +139,15 @@ export interface GenrePolarization {
     status: 'Highly Polarizing' | 'Consensus';
 }
 
+export interface GenreFinancials {
+    genre: string;
+    movie_count: number;
+    total_budget: number;
+    total_revenue: number;
+    average_revenue: number;
+    roi_percentage: number;
+}
+
 export interface PersonalityTraits {
     openness: number;
     extraversion: number;

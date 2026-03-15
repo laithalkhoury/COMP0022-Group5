@@ -5,11 +5,11 @@ import {
     ReferenceLine,
     PolarRadiusAxis
 } from 'recharts';
-import { Info, TrendingUp, Zap, Users } from 'lucide-react';
+import { Info, TrendingUp, Zap, Users, DollarSign, BarChart3 } from 'lucide-react';
 import { Spinner, ErrorPanel } from '@/components/ui';
 
-import { getGenrePopularity, getGenrePolarization, getNicheInsights } from '@/api/reports';
-import type { GenrePopularity, GenrePolarization, NicheInsight } from '@/types/dto';
+import { getGenrePopularity, getGenrePolarization, getNicheInsights, getGenreFinancials } from '@/api/reports';
+import type { GenrePopularity, GenrePolarization, NicheInsight, GenreFinancials } from '@/types/dto';
 import GenreTooltip from '@/components/GenreTooltip';
 import NicheTooltip from '@/components/NicheTooltip';
 
@@ -19,10 +19,20 @@ const normalize = (val: number | undefined) => {
     return Math.min(100, Math.max(0, score));
 };
 
+const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        notation: 'compact',
+        maximumFractionDigits: 1
+    }).format(val);
+};
+
 export default function GenreAnalysisPage() {
     const [popularityData, setPopularityData] = useState<GenrePopularity[]>([]);
     const [polarizationData, setPolarizationData] = useState<GenrePolarization[]>([]);
     const [nicheData, setNicheData] = useState<NicheInsight[]>([]);
+    const [financialData, setFinancialData] = useState<GenreFinancials[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -30,11 +40,12 @@ export default function GenreAnalysisPage() {
     const [selectedNicheGenre, setSelectedNicheGenre] = useState<string | null>(null);
 
     useEffect(() => {
-        Promise.all([getGenrePopularity(), getGenrePolarization(), getNicheInsights()])
-            .then(([pop, pol, niche]) => {
+        Promise.all([getGenrePopularity(), getGenrePolarization(), getNicheInsights(), getGenreFinancials()])
+            .then(([pop, pol, niche, fin]) => {
                 setPopularityData(pop);
                 setPolarizationData(pol);
                 setNicheData(niche);
+                setFinancialData(fin);
                 if (niche.length > 0) setSelectedNicheGenre(niche[0].genre);
             })
             .catch(err => setError(err.message))
@@ -203,6 +214,61 @@ export default function GenreAnalysisPage() {
                         <Info className="w-3 h-3 inline mr-1" />
                         Higher values indicate "Polarizing" genres where audiences are split between extreme high and low scores.
                     </p>
+                </div>
+
+                                        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h2 className="text-lg font-bold flex items-center gap-2 mb-6">
+                        <DollarSign className="w-5 h-5 text-green-500" />
+                        Commercial ROI (%)
+                    </h2>
+                    <div className="h-[400px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            {/* Increased bottom margin to make room for the X-Axis label */}
+                            <BarChart 
+                                data={financialData} 
+                                layout="vertical" 
+                                margin={{ top: 5, right: 30, left: 20, bottom: 30 }}
+                            >
+                                <XAxis 
+                                    type="number" 
+                                    tickFormatter={(value) => `${value}%`} // Adds % to the numbers
+                                    style={{ fontSize: '10px' }}
+                                    label={{ 
+                                        value: 'Return on Investment (%)', 
+                                        position: 'insideBottom', 
+                                        offset: -20, // Moves label down so it doesn't overlap ticks
+                                        style: { fontSize: '12px', fontWeight: 'bold', fill: '#6b7280' } 
+                                    }}
+                                />
+                                <YAxis 
+                                    dataKey="genre" 
+                                    type="category" 
+                                    width={80} 
+                                    style={{ fontSize: '10px' }} 
+                                />
+                                
+                                <Tooltip 
+                                    formatter={(value: any) => [`${value}% ROI`, 'Profitability'] as [string, string]}
+                                    contentStyle={{ borderRadius: '8px' }}
+                                />
+
+                                <Bar dataKey="roi_percentage" radius={[0, 4, 4, 0]}>
+                                    {financialData.map((entry, index) => (
+                                        <Cell 
+                                            key={`cell-${index}`} 
+                                            fill={entry.roi_percentage > 100 ? '#10b981' : '#94a3b8'} 
+                                        />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                        <p className="text-[11px] font-bold text-gray-500 uppercase">Top Avg Revenue</p>
+                        <p className="text-sm font-black text-green-600">
+                            {financialData[0]?.genre}: {formatCurrency(financialData[0]?.average_revenue)}
+                        </p>
+                    </div>
                 </div>
 
                 {/* 3. PERSONALITY NICHE (Radar Chart) */}
