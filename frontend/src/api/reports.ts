@@ -1,4 +1,4 @@
-import { GenrePopularity, GenrePolarization, NicheInsight } from '@/types/dto';
+import { GenrePopularity, GenrePolarization, NicheInsight, GenreFinancials, GenreAwards } from '@/types/dto';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const API_BASE = `${BASE_URL.replace(/\/$/, '')}/api/genres`;
@@ -23,6 +23,22 @@ export async function getNicheInsights(): Promise<NicheInsight[]> {
     const response = await fetch(`${API_BASE}/personality-insights`);
     if (!response.ok) {
         throw new Error('Failed to fetch personality niche insights');
+    }
+    return response.json();
+}
+
+export async function getGenreFinancials(): Promise<GenreFinancials[]> {
+    const response = await fetch(`${API_BASE}/genre-financials`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch genre financial report');
+    }
+    return response.json();
+}
+
+export async function getGenreAwards(): Promise<GenreAwards[]> {
+    const response = await fetch(`${API_BASE}/award-stats`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch award stats');
     }
     return response.json();
 }

@@ -46,6 +46,29 @@ CREATE TABLE Movie_Crew (
     UNIQUE (movie_id, crew_id, role_name)
 );
 
+CREATE TABLE Box_Office (
+    movie_id INT PRIMARY KEY,
+    budget BIGINT,
+    revenue BIGINT,
+    
+    CONSTRAINT fk_box_office_movie
+        FOREIGN KEY (movie_id)
+        REFERENCES Movie(movie_id)
+        ON DELETE CASCADE
+);
+
+CREATE TABLE Award (
+    award_id SERIAL PRIMARY KEY,
+    movie_id INT NOT NULL,
+    award_type TEXT NOT NULL,
+    award_name TEXT NOT NULL,
+
+    CONSTRAINT fk_award_movie
+        FOREIGN KEY (movie_id)
+        REFERENCES Movie(movie_id)
+        ON DELETE CASCADE
+);
+
 CREATE TABLE Movie_Character (
     character_id SERIAL PRIMARY KEY,
     movie_crew_id INT REFERENCES Movie_Crew(movie_crew_id) ON DELETE CASCADE,
