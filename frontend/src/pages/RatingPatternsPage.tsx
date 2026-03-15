@@ -11,7 +11,7 @@ import {
     ReferenceLine,
 } from 'recharts';
 import { getFilterOptions } from '@/api/filters';
-import { getScatterData, getGenreVsGenreData, getPreferenceAnalysis, searchMovies } from '@/api/ratingPatterns';
+import { getScatterData, getGenreVsGenreData, getPreferenceAnalysis, getTotalRatings, getThresholdCounts, searchMovies } from '@/api/ratingPatterns';
 import type {
     FilterOptions,
     ScatterResponse,
@@ -23,7 +23,6 @@ import { Spinner, ErrorPanel, EmptyState } from '@/components/ui';
 
 type Mode = 'movie-vs-genre' | 'genre-vs-genre';
 
-const RATING_STEPS = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0];
 
 /* ── Interpretation helpers ─────────────────────────────── */
 
@@ -249,6 +248,10 @@ export default function RatingPatternsPage() {
     // Min ratings (both modes)
     const [minRatings, setMinRatings] = useState(1);
 
+    // Total ratings & users (independent of Y-axis)
+    const [totalRatings, setTotalRatings] = useState<number | null>(null);
+    const [totalUsers, setTotalUsers] = useState<number | null>(null);
+
     // Results
     const [movieScatter, setMovieScatter] = useState<ScatterResponse | null>(null);
     const [genreScatter, setGenreScatter] = useState<GenreVsGenreResponse | null>(null);
@@ -265,6 +268,13 @@ export default function RatingPatternsPage() {
     const [highAnalysis, setHighAnalysis] = useState<PreferenceAnalysisResponse | null>(null);
     const [analysisLoading, setAnalysisLoading] = useState(false);
     const analysisDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Threshold counts (from backend)
+    const [lowTotalUsers, setLowTotalUsers] = useState<number | null>(null);
+    const [highTotalUsers, setHighTotalUsers] = useState<number | null>(null);
+    const [lowScatterUsers, setLowScatterUsers] = useState<number | null>(null);
+    const [highScatterUsers, setHighScatterUsers] = useState<number | null>(null);
+    const thresholdDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Load genre options
     useEffect(() => {
@@ -288,11 +298,17 @@ export default function RatingPatternsPage() {
     useEffect(() => {
         setMovieScatter(null);
         setGenreScatter(null);
+        setTotalRatings(null);
+        setTotalUsers(null);
         setError(null);
         setLowThreshold(null);
         setHighThreshold(null);
         setLowAnalysis(null);
         setHighAnalysis(null);
+        setLowTotalUsers(null);
+        setHighTotalUsers(null);
+        setLowScatterUsers(null);
+        setHighScatterUsers(null);
     }, [mode]);
 
     // Debounced movie search
@@ -359,13 +375,29 @@ export default function RatingPatternsPage() {
             .finally(() => setLoading(false));
     }, [mode, selectedGenresX, selectedGenresY, minRatings]);
 
+    // Fetch: total ratings (independent of Y-axis)
+    useEffect(() => {
+        if (mode === 'movie-vs-genre' && selectedMovie) {
+            getTotalRatings({ mode, movieId: selectedMovie.movieId })
+                .then((res) => { setTotalRatings(res.totalRatings); setTotalUsers(res.totalUsers); })
+                .catch(() => { setTotalRatings(null); setTotalUsers(null); });
+        } else if (mode === 'genre-vs-genre' && selectedGenresX.length > 0) {
+            getTotalRatings({ mode, genresX: selectedGenresX })
+                .then((res) => { setTotalRatings(res.totalRatings); setTotalUsers(res.totalUsers); })
+                .catch(() => { setTotalRatings(null); setTotalUsers(null); });
+        } else {
+            setTotalRatings(null);
+            setTotalUsers(null);
+        }
+    }, [mode, selectedMovie, selectedGenresX]);
+
     // Fetch: preference analysis (debounced)
     useEffect(() => {
         if (analysisDebounceRef.current) clearTimeout(analysisDebounceRef.current);
 
-        // Validate: need scatter data loaded and at least one threshold
-        const hasScatter = mode === 'movie-vs-genre' ? !!movieScatter : !!genreScatter;
-        if (!hasScatter) {
+        // Validate: need movie/X-genre selection and at least one threshold
+        const hasXSelection = mode === 'movie-vs-genre' ? !!selectedMovie : selectedGenresX.length > 0;
+        if (!hasXSelection) {
             setLowAnalysis(null);
             setHighAnalysis(null);
             return;
@@ -429,7 +461,71 @@ export default function RatingPatternsPage() {
         return () => {
             if (analysisDebounceRef.current) clearTimeout(analysisDebounceRef.current);
         };
-    }, [lowThreshold, highThreshold, combinationType, mode, selectedMovie, selectedGenresX, minRatings, movieScatter, genreScatter, lowSort, highSort]);
+    }, [lowThreshold, highThreshold, combinationType, mode, selectedMovie, selectedGenresX, minRatings, lowSort, highSort]);
+
+    // Fetch: threshold counts (debounced)
+    useEffect(() => {
+        if (thresholdDebounceRef.current) clearTimeout(thresholdDebounceRef.current);
+
+        const hasXSelection = mode === 'movie-vs-genre' ? !!selectedMovie : selectedGenresX.length > 0;
+        if (!hasXSelection) {
+            setLowTotalUsers(null);
+            setHighTotalUsers(null);
+            setLowScatterUsers(null);
+            setHighScatterUsers(null);
+            return;
+        }
+
+        if (lowThreshold === null && highThreshold === null) {
+            setLowTotalUsers(null);
+            setHighTotalUsers(null);
+            setLowScatterUsers(null);
+            setHighScatterUsers(null);
+            return;
+        }
+
+        thresholdDebounceRef.current = setTimeout(async () => {
+            const baseParams = {
+                mode,
+                movieId: mode === 'movie-vs-genre' ? selectedMovie?.movieId : undefined,
+                genresX: mode === 'genre-vs-genre' ? selectedGenresX : undefined,
+                genresY: selectedGenresY.length > 0 ? selectedGenresY : undefined,
+                minRatings,
+            };
+
+            try {
+                const promises: Promise<void>[] = [];
+
+                if (lowThreshold !== null) {
+                    promises.push(
+                        getThresholdCounts({ ...baseParams, thresholdValue: lowThreshold, thresholdType: 'low' })
+                            .then((res) => { setLowTotalUsers(res.totalUsers); setLowScatterUsers(res.scatterUsers); })
+                    );
+                } else {
+                    setLowTotalUsers(null);
+                    setLowScatterUsers(null);
+                }
+
+                if (highThreshold !== null) {
+                    promises.push(
+                        getThresholdCounts({ ...baseParams, thresholdValue: highThreshold, thresholdType: 'high' })
+                            .then((res) => { setHighTotalUsers(res.totalUsers); setHighScatterUsers(res.scatterUsers); })
+                    );
+                } else {
+                    setHighTotalUsers(null);
+                    setHighScatterUsers(null);
+                }
+
+                await Promise.all(promises);
+            } catch {
+                // Silently handle
+            }
+        }, 500);
+
+        return () => {
+            if (thresholdDebounceRef.current) clearTimeout(thresholdDebounceRef.current);
+        };
+    }, [lowThreshold, highThreshold, mode, selectedMovie, selectedGenresX, selectedGenresY, minRatings]);
 
     // Derived display values
     const yLabel = selectedGenresY.join(' + ');
@@ -438,10 +534,10 @@ export default function RatingPatternsPage() {
     const chartData =
         mode === 'movie-vs-genre'
             ? movieScatter
-                ? { points: movieScatter.points, count: movieScatter.count, correlation: movieScatter.correlation }
+                ? { points: movieScatter.points, count: movieScatter.count, correlation: movieScatter.correlation, totalRatings: movieScatter.totalRatings }
                 : null
             : genreScatter
-                ? { points: genreScatter.points, count: genreScatter.count, correlation: genreScatter.correlation }
+                ? { points: genreScatter.points, count: genreScatter.count, correlation: genreScatter.correlation, totalRatings: genreScatter.totalRatings }
                 : null;
 
     const xDataKey = mode === 'movie-vs-genre' ? 'movieRating' : 'xAvgRating';
@@ -468,18 +564,9 @@ export default function RatingPatternsPage() {
             ? !!selectedMovie && selectedGenresY.length > 0
             : selectedGenresX.length > 0 && selectedGenresY.length > 0;
 
-    const showPanel = lowThreshold !== null || highThreshold !== null;
-
-    // Count users in each threshold region from loaded scatter points
-    function pointX(p: { movieRating?: number; xAvgRating?: number }): number {
-        return mode === 'movie-vs-genre' ? (p.movieRating ?? 0) : (p.xAvgRating ?? 0);
-    }
-    const lowRegionCount = chartData && lowThreshold !== null
-        ? chartData.points.filter((p) => pointX(p) <= lowThreshold).length
-        : null;
-    const highRegionCount = chartData && highThreshold !== null
-        ? chartData.points.filter((p) => pointX(p) >= highThreshold).length
-        : null;
+    // Region counts from backend
+    const lowRegionCount = lowScatterUsers;
+    const highRegionCount = highScatterUsers;
 
     if (loadingOptions) {
         return (
@@ -492,7 +579,7 @@ export default function RatingPatternsPage() {
     const genres = filterOptions?.genres ?? [];
 
     return (
-        <div className="max-w-[1400px] mx-auto space-y-8 px-4">
+        <div className="max-w-[1600px] mx-auto px-4 space-y-4">
             <header>
                 <h1 className="text-2xl font-bold">Rating Pattern Analysis</h1>
                 <p className="text-gray-500 dark:text-gray-400">
@@ -501,322 +588,391 @@ export default function RatingPatternsPage() {
                 </p>
             </header>
 
-            {/* Mode selector */}
-            <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
-                    X-Axis Type
-                </label>
-                <select
-                    value={mode}
-                    onChange={(e) => setMode(e.target.value as Mode)}
-                    className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                    <option value="movie-vs-genre">Movie vs Genre</option>
-                    <option value="genre-vs-genre">Genre vs Genre</option>
-                </select>
-            </div>
+            <div className="flex gap-6 items-start">
+                {/* ── Left Panel ── */}
+                <div className="w-[380px] shrink-0 space-y-4">
+                    {/* Mode selector */}
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                        <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
+                            X-Axis Type
+                        </label>
+                        <select
+                            value={mode}
+                            onChange={(e) => setMode(e.target.value as Mode)}
+                            className="w-full px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                            <option value="movie-vs-genre">Movie vs Genre</option>
+                            <option value="genre-vs-genre">Genre vs Genre</option>
+                        </select>
+                    </div>
 
-            {/* Controls */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Left: X-axis input */}
-                    {mode === 'movie-vs-genre' ? (
-                        <div className="relative" ref={movieDropdownRef}>
-                            <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
-                                Select Movie (X-Axis)
-                            </label>
-                            <input
-                                type="text"
-                                value={movieQuery}
-                                onChange={(e) => handleMovieQueryChange(e.target.value)}
-                                placeholder="Type to search, e.g. Toy Story"
-                                className="w-full px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
+                    {/* X-axis selector */}
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                        {mode === 'movie-vs-genre' ? (
+                            <div className="relative" ref={movieDropdownRef}>
+                                <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
+                                    Select Movie (X-Axis)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={movieQuery}
+                                    onChange={(e) => handleMovieQueryChange(e.target.value)}
+                                    placeholder="Type to search, e.g. Toy Story"
+                                    className="w-full px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                                {showMovieDropdown && movieResults.length > 0 && (
+                                    <ul className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                        {movieResults.map((m) => (
+                                            <li
+                                                key={m.movieId}
+                                                onClick={() => handleSelectMovie(m)}
+                                                className="px-4 py-2 text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
+                                            >
+                                                <span className="font-medium">{m.title}</span>
+                                                {m.year && (
+                                                    <span className="text-gray-400 ml-2">({m.year})</span>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                                {selectedMovie && selectedMovie.genres.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                        {selectedMovie.genres.map((g) => (
+                                            <span
+                                                key={g}
+                                                className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                                            >
+                                                {g}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <GenreMultiSelect
+                                label="Select Genres (X-Axis)"
+                                genres={genres}
+                                selected={selectedGenresX}
+                                onToggle={toggleGenreX}
                             />
-                            {showMovieDropdown && movieResults.length > 0 && (
-                                <ul className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                                    {movieResults.map((m) => (
-                                        <li
-                                            key={m.movieId}
-                                            onClick={() => handleSelectMovie(m)}
-                                            className="px-4 py-2 text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
-                                        >
-                                            <span className="font-medium">{m.title}</span>
-                                            {m.year && (
-                                                <span className="text-gray-400 ml-2">({m.year})</span>
-                                            )}
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                            {selectedMovie && selectedMovie.genres.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                    {selectedMovie.genres.map((g) => (
-                                        <span
-                                            key={g}
-                                            className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
-                                        >
-                                            {g}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <GenreMultiSelect
-                            label="Select Genres (X-Axis)"
-                            genres={genres}
-                            selected={selectedGenresX}
-                            onToggle={toggleGenreX}
-                        />
-                    )}
-
-                    {/* Right: Y-axis genres */}
-                    <GenreMultiSelect
-                        label="Select Genres (Y-Axis)"
-                        genres={genres}
-                        selected={selectedGenresY}
-                        onToggle={toggleGenreY}
-                    />
-                </div>
-
-                {/* Min ratings + threshold controls */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Min ratings filter */}
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
-                            Min Movies Rated per Genre
-                        </label>
-                        <input
-                            type="number"
-                            min={1}
-                            value={minRatings}
-                            onChange={(e) => setMinRatings(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-24 px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                        <p className="text-xs text-gray-400 mt-1">
-                            Only include users who rated at least this many movies in each genre group.
-                        </p>
-                        {chartData && (
-                            <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold mt-1">
-                                Users plotted: {chartData.count.toLocaleString()}
-                            </p>
                         )}
                     </div>
 
-                    {/* Low threshold */}
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
-                            Low Rating Region (&lt;=)
-                        </label>
-                        <input
-                            type="number"
-                            min={0.5}
-                            max={5}
-                            step={0.5}
-                            list="rating-steps"
-                            placeholder="None"
-                            value={lowThreshold ?? ''}
-                            onChange={(e) => {
-                                const v = e.target.value;
-                                setLowThreshold(v === '' ? null : Math.min(5, Math.max(0.5, parseFloat(v) || 0.5)));
-                            }}
-                            className="w-24 px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                        {lowThreshold !== null && chartData && (
-                            <p className="text-xs text-red-600 dark:text-red-400 font-semibold mt-1">
-                                {(lowRegionCount ?? 0).toLocaleString()} users in region
+                    {/* Filters & thresholds */}
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-4">
+                        {/* Total ratings & users */}
+                        {totalRatings !== null && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Total ratings for selected {mode === 'movie-vs-genre' ? 'movie' : 'genre(s)'}: <span className="font-semibold text-gray-700 dark:text-gray-200">{totalRatings.toLocaleString()}</span>
                             </p>
                         )}
-                    </div>
-
-                    {/* High threshold */}
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
-                            High Rating Region (&gt;=)
-                        </label>
-                        <input
-                            type="number"
-                            min={0.5}
-                            max={5}
-                            step={0.5}
-                            list="rating-steps"
-                            placeholder="None"
-                            value={highThreshold ?? ''}
-                            onChange={(e) => {
-                                const v = e.target.value;
-                                setHighThreshold(v === '' ? null : Math.min(5, Math.max(0.5, parseFloat(v) || 0.5)));
-                            }}
-                            className="w-24 px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                        {highThreshold !== null && chartData && (
-                            <p className="text-xs text-green-600 dark:text-green-400 font-semibold mt-1">
-                                {(highRegionCount ?? 0).toLocaleString()} users in region
+                        {totalUsers !== null && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Total users rated this {mode === 'movie-vs-genre' ? 'movie' : 'genre(s)'}: <span className="font-semibold text-gray-700 dark:text-gray-200">{totalUsers.toLocaleString()}</span>
                             </p>
                         )}
-                    </div>
 
-                    {/* Shared datalist for threshold inputs */}
-                    <datalist id="rating-steps">
-                        {RATING_STEPS.map((v) => (
-                            <option key={v} value={v} />
-                        ))}
-                    </datalist>
-                </div>
-
-            </div>
-
-            {/* Results area */}
-            <div>
-                {error && (
-                    <ErrorPanel message={error} onRetry={() => setError(null)} />
-                )}
-
-                {loading && (
-                    <div className="flex flex-col items-center justify-center py-20 space-y-4">
-                        <Spinner />
-                        <p className="text-sm text-gray-500 animate-pulse font-medium">
-                            Loading scatter data...
-                        </p>
-                    </div>
-                )}
-
-                {!loading && !error && hasSelection && chartData && chartData.count === 0 && (
-                    <EmptyState />
-                )}
-
-                {!loading && !error && chartData && chartData.count > 0 && (
-                    <div className="space-y-6">
-                        <div className={`flex gap-6 ${showPanel ? 'flex-col lg:flex-row' : ''}`}>
-                            {/* Chart column */}
-                            <div className={showPanel ? 'flex-[3] min-w-0' : 'w-full'}>
-                                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm">
-                                    <h2 className="text-lg font-bold mb-4">{chartTitle}</h2>
-                                    <ResponsiveContainer width="100%" height={450}>
-                                        <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 20 }}>
-                                            <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                                            <XAxis
-                                                type="number"
-                                                dataKey={xDataKey}
-                                                domain={[0, 5.5]}
-                                                ticks={[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]}
-                                                tick={{ fontSize: 12 }}
-                                            >
-                                                <Label
-                                                    value={xAxisLabel}
-                                                    position="bottom"
-                                                    offset={15}
-                                                    style={{ fontSize: 13, fill: '#6b7280' }}
-                                                />
-                                            </XAxis>
-                                            <YAxis
-                                                type="number"
-                                                dataKey={yDataKey}
-                                                domain={[0, 5.5]}
-                                                ticks={[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]}
-                                                tick={{ fontSize: 12 }}
-                                            >
-                                                <Label
-                                                    value={yAxisLabel}
-                                                    angle={-90}
-                                                    position="insideLeft"
-                                                    offset={0}
-                                                    style={{ fontSize: 13, fill: '#6b7280', textAnchor: 'middle' }}
-                                                />
-                                            </YAxis>
-                                            {lowThreshold !== null && (
-                                                <>
-                                                    <ReferenceArea x1={0} x2={lowThreshold} fill="#ef4444" fillOpacity={0.08} />
-                                                    <ReferenceLine x={lowThreshold} stroke="#ef4444" strokeDasharray="5 5" strokeWidth={1.5} />
-                                                </>
-                                            )}
-                                            {highThreshold !== null && (
-                                                <>
-                                                    <ReferenceArea x1={highThreshold} x2={5.5} fill="#22c55e" fillOpacity={0.08} />
-                                                    <ReferenceLine x={highThreshold} stroke="#22c55e" strokeDasharray="5 5" strokeWidth={1.5} />
-                                                </>
-                                            )}
-                                            <Scatter
-                                                data={chartData.points}
-                                                fill="#3b82f6"
-                                                fillOpacity={0.5}
-                                                r={3}
-                                            />
-                                        </ScatterChart>
-                                    </ResponsiveContainer>
+                        {/* Min ratings filter */}
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
+                                Min Movies Rated per Genre
+                            </label>
+                            <div className="relative w-24">
+                                <input
+                                    type="text"
+                                    defaultValue={minRatings}
+                                    key={`min-${minRatings}`}
+                                    onBlur={(e) => {
+                                        const n = parseInt(e.target.value);
+                                        if (!isNaN(n) && n >= 1) setMinRatings(n);
+                                        else e.target.value = String(minRatings);
+                                    }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                                    className="w-full pl-3 pr-6 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                                <div className="absolute right-0 inset-y-0 flex flex-col border-l border-gray-300 dark:border-gray-600">
+                                    <button type="button" onClick={() => setMinRatings((v) => v + 1)} className="flex-1 px-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-tr-md transition-colors">
+                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                                    </button>
+                                    <button type="button" onClick={() => setMinRatings((v) => Math.max(1, v - 1))} className="flex-1 px-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-br-md border-t border-gray-300 dark:border-gray-600 transition-colors">
+                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                    </button>
                                 </div>
                             </div>
-
-                            {/* Analysis side panel */}
-                            {showPanel && (
-                                <div className="flex-[2] min-w-0">
-                                    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm space-y-4 h-full">
-                                        <div className="flex items-center justify-between">
-                                            <h3 className="text-sm font-bold">Preference Analysis</h3>
-                                            {analysisLoading && <Spinner />}
-                                        </div>
-
-                                        {/* Combination type toggle */}
-                                        <div className="flex gap-1">
-                                            <button
-                                                type="button"
-                                                onClick={() => setCombinationType('single')}
-                                                className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                                                    combinationType === 'single'
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                                }`}
-                                            >
-                                                Single Genres
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setCombinationType('pair')}
-                                                className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                                                    combinationType === 'pair'
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                                }`}
-                                            >
-                                                Genre Pairs
-                                            </button>
-                                        </div>
-
-                                        {/* Low region table */}
-                                        {lowThreshold !== null && (
-                                            <PreferenceTable
-                                                label="Low Raters"
-                                                thresholdValue={lowThreshold}
-                                                analysis={lowAnalysis}
-                                                sort={lowSort}
-                                                onSort={(col) => setLowSort((prev) =>
-                                                    prev.column === col
-                                                        ? { column: col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-                                                        : { column: col, dir: 'desc' }
-                                                )}
-                                                colorClass="red"
-                                            />
-                                        )}
-
-                                        {/* High region table */}
-                                        {highThreshold !== null && (
-                                            <PreferenceTable
-                                                label="High Raters"
-                                                thresholdValue={highThreshold}
-                                                analysis={highAnalysis}
-                                                sort={highSort}
-                                                onSort={(col) => setHighSort((prev) =>
-                                                    prev.column === col
-                                                        ? { column: col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-                                                        : { column: col, dir: 'desc' }
-                                                )}
-                                                colorClass="green"
-                                            />
-                                        )}
-                                    </div>
-                                </div>
-                            )}
+                            <p className="text-xs text-gray-400 mt-1">
+                                Only plot users who rated at least this many movies matching all selected Y-axis genre(s). Also applies per genre row in Preference Analysis.
+                            </p>
                         </div>
 
+                        {/* Low threshold */}
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
+                                Low Rating Region (&lt;=)
+                            </label>
+                            <div className="flex items-center gap-3">
+                                <div className="relative w-24 shrink-0">
+                                    <input
+                                        type="text"
+                                        defaultValue={lowThreshold ?? ''}
+                                        key={`low-${lowThreshold}`}
+                                        placeholder="None"
+                                        onBlur={(e) => {
+                                            const v = e.target.value.trim();
+                                            if (v === '') { setLowThreshold(null); return; }
+                                            const n = parseFloat(v);
+                                            if (!isNaN(n) && n >= 0.5 && n <= 5) setLowThreshold(n);
+                                            else e.target.value = lowThreshold != null ? String(lowThreshold) : '';
+                                        }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                                        className="w-full pl-3 pr-6 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                    <div className="absolute right-0 inset-y-0 flex flex-col border-l border-gray-300 dark:border-gray-600">
+                                        <button type="button" onClick={() => setLowThreshold((v) => v === null ? 0.5 : Math.min(5, v + 0.5))} className="flex-1 px-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-tr-md transition-colors">
+                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                                        </button>
+                                        <button type="button" onClick={() => setLowThreshold((v) => v === null ? null : Math.max(0.5, v - 0.5))} className="flex-1 px-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-br-md border-t border-gray-300 dark:border-gray-600 transition-colors">
+                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                {lowTotalUsers !== null && (
+                                    <span className="text-xs text-red-600 dark:text-red-400 font-semibold">
+                                        {lowTotalUsers.toLocaleString()} users
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* High threshold */}
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
+                                High Rating Region (&gt;=)
+                            </label>
+                            <div className="flex items-center gap-3">
+                                <div className="relative w-24 shrink-0">
+                                    <input
+                                        type="text"
+                                        defaultValue={highThreshold ?? ''}
+                                        key={`high-${highThreshold}`}
+                                        placeholder="None"
+                                        onBlur={(e) => {
+                                            const v = e.target.value.trim();
+                                            if (v === '') { setHighThreshold(null); return; }
+                                            const n = parseFloat(v);
+                                            if (!isNaN(n) && n >= 0.5 && n <= 5) setHighThreshold(n);
+                                            else e.target.value = highThreshold != null ? String(highThreshold) : '';
+                                        }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                                        className="w-full pl-3 pr-6 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-transparent focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                    <div className="absolute right-0 inset-y-0 flex flex-col border-l border-gray-300 dark:border-gray-600">
+                                        <button type="button" onClick={() => setHighThreshold((v) => v === null ? 0.5 : Math.min(5, v + 0.5))} className="flex-1 px-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-tr-md transition-colors">
+                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                                        </button>
+                                        <button type="button" onClick={() => setHighThreshold((v) => v === null ? null : Math.max(0.5, v - 0.5))} className="flex-1 px-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-br-md border-t border-gray-300 dark:border-gray-600 transition-colors">
+                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                {highTotalUsers !== null && (
+                                    <span className="text-xs text-green-600 dark:text-green-400 font-semibold">
+                                        {highTotalUsers.toLocaleString()} users
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Preference Analysis */}
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-bold">Preference Analysis</h3>
+                            {analysisLoading && <Spinner />}
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Genre preferences of <strong>all</strong> users who rated this selected movie/genres (X-Axis)
+                        </p>
+
+                        {/* Combination type toggle */}
+                        <div className="flex gap-1">
+                            <button
+                                type="button"
+                                onClick={() => setCombinationType('single')}
+                                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                                    combinationType === 'single'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                }`}
+                            >
+                                Single Genres
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setCombinationType('pair')}
+                                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                                    combinationType === 'pair'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                }`}
+                            >
+                                Genre Pairs
+                            </button>
+                        </div>
+
+                        {/* Low region table */}
+                        {lowThreshold !== null && (
+                            <PreferenceTable
+                                label="Low Raters"
+                                thresholdValue={lowThreshold}
+                                analysis={lowAnalysis}
+                                sort={lowSort}
+                                onSort={(col) => setLowSort((prev) =>
+                                    prev.column === col
+                                        ? { column: col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+                                        : { column: col, dir: 'desc' }
+                                )}
+                                colorClass="red"
+                            />
+                        )}
+
+                        {/* High region table */}
+                        {highThreshold !== null && (
+                            <PreferenceTable
+                                label="High Raters"
+                                thresholdValue={highThreshold}
+                                analysis={highAnalysis}
+                                sort={highSort}
+                                onSort={(col) => setHighSort((prev) =>
+                                    prev.column === col
+                                        ? { column: col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+                                        : { column: col, dir: 'desc' }
+                                )}
+                                colorClass="green"
+                            />
+                        )}
+
+                        {lowThreshold === null && highThreshold === null && (
+                            <p className="text-xs text-gray-400 py-2">Set a low or high rating region to see analysis.</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* ── Right Panel ── */}
+                <div className="flex-1 min-w-0 space-y-4">
+                    {/* Y-axis genre selector */}
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                        <GenreMultiSelect
+                            label="Select Genres (Y-Axis)"
+                            genres={genres}
+                            selected={selectedGenresY}
+                            onToggle={toggleGenreY}
+                        />
+                    </div>
+
+                    {/* Graph area */}
+                    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm">
+                        {error && (
+                            <ErrorPanel message={error} onRetry={() => setError(null)} />
+                        )}
+
+                        {loading && (
+                            <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                                <Spinner />
+                                <p className="text-sm text-gray-500 animate-pulse font-medium">
+                                    Loading scatter data...
+                                </p>
+                            </div>
+                        )}
+
+                        {!loading && !error && hasSelection && chartData && chartData.count === 0 && (
+                            <EmptyState />
+                        )}
+
+                        {!loading && !error && chartData && chartData.count > 0 && (
+                            <>
+                                <h2 className="text-lg font-bold mb-1">{chartTitle}</h2>
+                                <div className="flex flex-wrap gap-4 mb-4 text-xs font-semibold">
+                                    <span className="text-blue-600 dark:text-blue-400">
+                                        Users plotted: {chartData.count.toLocaleString()}
+                                    </span>
+                                    {lowThreshold !== null && (
+                                        <span className="text-red-600 dark:text-red-400">
+                                            Low region (&le;{lowThreshold}): {(lowRegionCount ?? 0).toLocaleString()} users
+                                        </span>
+                                    )}
+                                    {highThreshold !== null && (
+                                        <span className="text-green-600 dark:text-green-400">
+                                            High region (&ge;{highThreshold}): {(highRegionCount ?? 0).toLocaleString()} users
+                                        </span>
+                                    )}
+                                </div>
+                                <ResponsiveContainer width="100%" height={450}>
+                                    <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 20 }}>
+                                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                                        <XAxis
+                                            type="number"
+                                            dataKey={xDataKey}
+                                            domain={[0, 5.5]}
+                                            ticks={[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]}
+                                            tick={{ fontSize: 12 }}
+                                        >
+                                            <Label
+                                                value={xAxisLabel}
+                                                position="bottom"
+                                                offset={15}
+                                                style={{ fontSize: 13, fill: '#6b7280' }}
+                                            />
+                                        </XAxis>
+                                        <YAxis
+                                            type="number"
+                                            dataKey={yDataKey}
+                                            domain={[0, 5.5]}
+                                            ticks={[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]}
+                                            tick={{ fontSize: 12 }}
+                                        >
+                                            <Label
+                                                value={yAxisLabel}
+                                                angle={-90}
+                                                position="insideLeft"
+                                                offset={0}
+                                                style={{ fontSize: 13, fill: '#6b7280', textAnchor: 'middle' }}
+                                            />
+                                        </YAxis>
+                                        {lowThreshold !== null && (
+                                            <>
+                                                <ReferenceArea x1={0} x2={lowThreshold} fill="#ef4444" fillOpacity={0.08} />
+                                                <ReferenceLine x={lowThreshold} stroke="#ef4444" strokeDasharray="5 5" strokeWidth={1.5} />
+                                            </>
+                                        )}
+                                        {highThreshold !== null && (
+                                            <>
+                                                <ReferenceArea x1={highThreshold} x2={5.5} fill="#22c55e" fillOpacity={0.08} />
+                                                <ReferenceLine x={highThreshold} stroke="#22c55e" strokeDasharray="5 5" strokeWidth={1.5} />
+                                            </>
+                                        )}
+                                        <Scatter
+                                            data={chartData.points}
+                                            fill="#3b82f6"
+                                            fillOpacity={0.5}
+                                            r={3}
+                                        />
+                                    </ScatterChart>
+                                </ResponsiveContainer>
+                            </>
+                        )}
+
+                        {!loading && !error && !chartData && (
+                            <div className="py-16 text-center text-gray-400">
+                                {mode === 'movie-vs-genre'
+                                    ? 'Select a movie and at least one genre to see the scatter plot.'
+                                    : 'Select genres for both axes to see the scatter plot.'}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Correlation info */}
+                    {!loading && !error && chartData && chartData.count > 0 && (
                         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm space-y-3">
                             <div className="flex flex-wrap gap-6 text-sm">
                                 <div>
@@ -828,16 +984,8 @@ export default function RatingPatternsPage() {
                             </div>
                             <p className="text-sm text-gray-500 dark:text-gray-400">{interpretText}</p>
                         </div>
-                    </div>
-                )}
-
-                {!loading && !error && !chartData && (
-                    <div className="py-16 text-center text-gray-400">
-                        {mode === 'movie-vs-genre'
-                            ? 'Select a movie and at least one genre to see the scatter plot.'
-                            : 'Select genres for both axes to see the scatter plot.'}
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );

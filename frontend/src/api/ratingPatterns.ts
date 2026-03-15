@@ -49,6 +49,38 @@ export async function getPreferenceAnalysis(params: {
     });
 }
 
+export async function getTotalRatings(params: {
+    mode: 'movie-vs-genre' | 'genre-vs-genre';
+    movieId?: number;
+    genresX?: string[];
+}): Promise<{ totalRatings: number; totalUsers: number }> {
+    return apiFetch<{ totalRatings: number; totalUsers: number }>('/api/rating-patterns/total-ratings', {
+        mode: params.mode,
+        movie_id: params.movieId,
+        genre_x: params.genresX,
+    });
+}
+
+export async function getThresholdCounts(params: {
+    mode: 'movie-vs-genre' | 'genre-vs-genre';
+    movieId?: number;
+    genresX?: string[];
+    genresY?: string[];
+    thresholdValue: number;
+    thresholdType: 'low' | 'high';
+    minRatings?: number;
+}): Promise<{ totalUsers: number; scatterUsers: number | null }> {
+    return apiFetch<{ totalUsers: number; scatterUsers: number | null }>('/api/rating-patterns/threshold-counts', {
+        mode: params.mode,
+        movie_id: params.movieId,
+        genre_x: params.genresX,
+        genre_y: params.genresY,
+        threshold_value: params.thresholdValue,
+        threshold_type: params.thresholdType,
+        min_ratings: params.minRatings,
+    });
+}
+
 export async function searchMovies(
     query: string,
     limit = 10

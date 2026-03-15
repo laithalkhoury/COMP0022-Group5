@@ -92,6 +92,7 @@ export interface ScatterResponse {
     points: ScatterPoint[];
     count: number;
     correlation: number | null;
+    totalRatings: number;
 }
 
 export interface MovieSearchResult {
@@ -113,6 +114,7 @@ export interface GenreVsGenreResponse {
     count: number;
     correlation: number | null;
     minRatings: number;
+    totalRatings: number;
 }
 
 export interface PreferenceGenreEntry {
