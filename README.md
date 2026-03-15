@@ -38,24 +38,38 @@ docker compose down -v
 
 ---
 
-# React JS Frontend
+# React Application
 
-A React TypeScript frontend built with Vite, Tailwind CSS, and React Router.
+A modern frontend built with Vite, Tailwind CSS, and React Router.
 
-## Setup
+## How to Run Locally
+
+Open the `COMP0022-Group5/frontend` folder and run:
 
 ```
 npm install
 npm run dev
 ```
 
-# Environment Variables `.env`
+## Folder Structure
+
+`/src/api`: Modular API clients that correspond to backend routes (e.g., movies.ts, predictions.ts).
+
+`/src/pages`: Main view components representing each dashboard requirement, such as MoviesListPage.tsx and PredictiveRatingsPage.tsx.
+
+`/src/components`: Reusable UI elements including the NavBar.tsx, FiltersBar.tsx, and specialized data visualisation tools.
+
+`/src/types`: Centralised TypeScript interfaces (dto.ts) ensuring type safety for API responses across the app.
+
+`/src/app`: Contains global providers, the main Layout.tsx, and the Router.tsx for navigation.
+
+## Environment Variables (`.env`)
 
 | Variable | Default | Description |
 |---|---|---|
-| `VITE_API_BASE_URL` | `http://localhost:3000` | Backend REST API base URL |
+| `PORT` | `8000` | Backend REST API Port |
 
-## Database
+# Database
 
 The project uses **PostgreSQL 17** to store movie metadata, ratings, tags, personality data, user accounts, and saved collections.
 
@@ -76,7 +90,7 @@ docker compose down -v
 docker compose up --build
 ```
 
-### Environment Variables .env
+### Environment Variables (`.env`)
 
 | Variable    | Description                                                  |
 | :---------- | :----------------------------------------------------------- |
