@@ -518,9 +518,76 @@ def run_poster_etl():
 
     print(f"Poster ETL complete! Updated rows: {total_updates}.")
 
+def run_box_office_etl():
+    """
+    Populates the Box_Office table from box_office.csv.
+    Expected columns: movie_id, budget, revenue
+    """
+    conn = psycopg2.connect(**DB_PARAMS)
+    cur = conn.cursor()
+
+    print("Populating Box_Office table...")
+    
+    cur.execute("SELECT movie_id FROM Movie")
+    valid_movie_ids = {row[0] for row in cur.fetchall()}
+
+    df = pd.read_csv(f'{FOLDER_PATH}/box_office.csv')
+    
+    count = 0
+    for _, row in df.iterrows():
+        m_id = int(row['movie_id'])
+        if m_id in valid_movie_ids:
+            cur.execute(
+                """INSERT INTO Box_Office (movie_id, budget, revenue) 
+                   VALUES (%s, %s, %s) 
+                   ON CONFLICT (movie_id) DO UPDATE SET 
+                   budget = EXCLUDED.budget, revenue = EXCLUDED.revenue""",
+                (m_id, row['budget'], row['revenue'])
+            )
+            count += 1
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    print(f"Box_Office ETL complete! {count} rows inserted/updated.")
+
+
+def run_award_etl():
+    """
+    Populates the Award table from awards.csv.
+    Expected columns: movie_id, award_type, award_name
+    """
+    conn = psycopg2.connect(**DB_PARAMS)
+    cur = conn.cursor()
+
+    print("Populating Award table...")
+    
+    cur.execute("SELECT movie_id FROM Movie")
+    valid_movie_ids = {row[0] for row in cur.fetchall()}
+
+    df = pd.read_csv(f'{FOLDER_PATH}/awards.csv')
+    
+    count = 0
+    for _, row in df.iterrows():
+        m_id = int(row['movie_id'])
+        if m_id in valid_movie_ids:
+            cur.execute(
+                """INSERT INTO Award (movie_id, award_type, award_name) 
+                   VALUES (%s, %s, %s)""",
+                (m_id, row['award_type'].strip(), row['award_name'].strip())
+            )
+            count += 1
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    print(f"Award ETL complete! {count} rows inserted.")
+
 
 if __name__ == "__main__":
     run_movie_etl()
+    run_box_office_etl()
+    run_award_etl()  
     run_ml_user_etl()
     run_personality_etl()
     run_tag_etl()
