@@ -175,4 +175,56 @@ def get_personality_niche_insights():
         if conn:
             conn.close()
 
-# Requirement 3: Analysis of Viewer Rating Patterns
+
+@reports_bp.route('/genre-financials', methods=['GET'])
+def get_genre_financial_report():
+    """
+    Generates a financial performance report by genre, 
+    calculating total revenue, budget, and average profitability.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+        SELECT 
+            g.name as genre,
+            COUNT(bo.movie_id) as movies_with_data,
+            SUM(bo.budget) as total_budget,
+            SUM(bo.revenue) as total_revenue,
+            ROUND(AVG(bo.revenue), 2) as avg_revenue,
+            CASE 
+                WHEN SUM(bo.budget) > 0 THEN 
+                    ROUND(((SUM(bo.revenue) - SUM(bo.budget)) / SUM(bo.budget)::numeric) * 100, 2)
+                ELSE 0 
+            END as roi_percentage
+        FROM Genre g
+        JOIN Movie_Genre mg ON g.genre_id = mg.genre_id
+        JOIN Box_Office bo ON mg.movie_id = bo.movie_id
+        GROUP BY g.name
+        HAVING SUM(bo.revenue) > 0
+        ORDER BY total_revenue DESC;
+        """
+        
+        cur.execute(query)
+        results = cur.fetchall()
+
+        financial_report = []
+        for row in results:
+            financial_report.append({
+                "genre": row['genre'],
+                "movie_count": row['movies_with_data'],
+                "total_budget": int(row['total_budget']) if row['total_budget'] else 0,
+                "total_revenue": int(row['total_revenue']) if row['total_revenue'] else 0,
+                "average_revenue": float(row['avg_revenue']) if row['avg_revenue'] else 0,
+                "roi_percentage": float(row['roi_percentage'])
+            })
+
+        return jsonify(financial_report), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
