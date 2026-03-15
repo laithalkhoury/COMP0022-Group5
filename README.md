@@ -55,7 +55,90 @@ npm run dev
 |---|---|---|
 | `VITE_API_BASE_URL` | `http://localhost:3000` | Backend REST API base URL |
 
-# MovieDB Backend
+## Database
+
+The project uses **PostgreSQL 17** to store movie metadata, ratings, tags, personality data, user accounts, and saved collections.
+
+When you run docker:
+
+```bash
+docker compose up --build
+```
+
+the db service starts PostgreSQL and initializes the database from`db/dump.sql`. This preloaded dump is the database source used during normal Docker startup. The backend connects to PostgreSQL through the Docker service name db, and the database is also exposed locally at:
+
+- PostgreSQL: localhost:5432
+
+If you want to fully reset the database and recreate it from the checked-in dump:
+
+```
+docker compose down -v
+docker compose up --build
+```
+
+### Environment Variables .env
+
+| Variable    | Description                                                  |
+| :---------- | :----------------------------------------------------------- |
+| DB_NAME     | PostgreSQL database name                                     |
+| DB_USER     | PostgreSQL username                                          |
+| DB_PASSWORD | PostgreSQL password                                          |
+| DB_HOST     | Database host used by the backend                            |
+| DB_PORT     | Database port                                                |
+| FOLDER_PATH | Only needed when running the ETL script locally to rebuild the database |
+
+## Schema Overview
+
+The schema is defined in `db/schema.sql`
+
+Main tables include:
+
+- Movie, Genre, Movie_Genre
+- Crew, Movie_Crew, Movie_Character
+- ML_User, Rating
+- Tag, User_Movie_Tag
+- Person_User, Person_User_Recommendation
+- App_User
+- Collection_List, List_Item
+- Box_Office, Award
+
+**NOTE:** Movie.movie_id stores the **IMDb ID** used by the ETL pipeline, not the original MovieLens `movieId`.
+
+### Rebuilding the Database
+
+For normal development, you do **not** need to rebuild the database manually. Docker loads the prebuilt dump from db/dump.sql.
+
+If you need to regenerate the database manually, the project includes:
+
+- `db/schema.sql` for schema creation
+- `db/fill_db.py for ETL` and data loading
+
+The ETL script requires:
+
+- database environment variables
+- FOLDER_PATH pointing to the dataset directory
+
+It also expects additional data sources such as poster, box office, and awards files, so the ETL workflow is separate from normal Docker startup.
+
+### Data Provenance
+
+The database content is based on an ETL pipeline implemented in `db/fill_db.py`, which combines data from multiple sources:
+
+- the original MovieLens `ml-latest-small` dataset (https://files.grouplens.org/datasets/movielens/ml-latest-small.zip) including:
+  - `movies.csv`
+  - `links.csv`
+  - `ratings.csv`
+  - `tags.csv`
+- the GroupLens personality dataset (https://files.grouplens.org/datasets/personality-isf2018/personality-isf2018.zip):
+  - `personality-data.csv`
+- IMDb data exports used for cast and crew enrichment:
+  - `title.principals.tsv` (https://datasets.imdbws.com/title.principals.tsv.gz)
+  - `name.basics.tsv` (https://datasets.imdbws.com/name.basics.tsv.gz)
+- additional enrichment data for posters, box office, and awards, derived from TMDb and Wikidata through the project notebook `db/get_dataset.ipynb`
+
+These sources were used to build the preloaded SQL dump included in this repository.
+
+## MovieDB Backend
 
 ## 🚀 Tech Stack
 *   **Language:** Python 3.11+
