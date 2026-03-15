@@ -226,7 +226,7 @@ def run_ml_user_etl():
     cur = conn.cursor()
 
     print("Populating ML_User table...")
-    ratings = pd.read_csv(FOLDER_PATH+'ratings.csv')
+    ratings = pd.read_csv(FOLDER_PATH+'/ratings.csv')
     unique_users = ratings['userId'].unique()
 
     for user_id in unique_users:
@@ -289,7 +289,7 @@ def load_movielens_to_imdb_map() -> dict[int, int]:
     Because your Movie.movie_id is currently inserted using links.imdbId.
     """
     links = pd.read_csv(
-        FOLDER_PATH + "links.csv",
+        FOLDER_PATH + "/links.csv",
         usecols=["movieId", "imdbId"],
         dtype={"movieId": "int64", "imdbId": "string"},
         low_memory=False
@@ -311,7 +311,7 @@ def run_tag_etl():
     print("Populating Tag table from tags.csv...")
 
     tags_iter = pd.read_csv(
-        FOLDER_PATH + "tags.csv",
+        FOLDER_PATH + "/tags.csv",
         usecols=["tag"],
         chunksize=200_000,
         low_memory=False
@@ -358,7 +358,7 @@ def run_rating_etl():
     ml_to_imdb = load_movielens_to_imdb_map()
 
     ratings_iter = pd.read_csv(
-        FOLDER_PATH + "ratings.csv",
+        FOLDER_PATH + "/ratings.csv",
         usecols=["userId", "movieId", "rating", "timestamp"],
         chunksize=200_000,
         low_memory=False
@@ -428,7 +428,7 @@ def run_user_movie_tag_etl():
     tag_map = {tag_text: tag_id for (tag_id, tag_text) in cur.fetchall()}
 
     tags_iter = pd.read_csv(
-        FOLDER_PATH + "tags.csv",
+        FOLDER_PATH + "/tags.csv",
         usecols=["userId", "movieId", "tag", "timestamp"],
         chunksize=200_000,
         low_memory=False
@@ -492,7 +492,7 @@ def run_poster_etl():
     print("Updating Movie poster_url from poster.csv...")
 
     poster_iter = pd.read_csv(
-        FOLDER_PATH + "poster.csv",
+        FOLDER_PATH + "/poster.csv",
         usecols=["imdbId", "poster_url"],
         chunksize=200_000,
         low_memory=False
