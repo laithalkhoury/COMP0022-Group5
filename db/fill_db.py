@@ -535,16 +535,19 @@ def run_box_office_etl():
     
     count = 0
     for _, row in df.iterrows():
-        m_id = int(row['movie_id'])
-        if m_id in valid_movie_ids:
-            cur.execute(
-                """INSERT INTO Box_Office (movie_id, budget, revenue) 
-                   VALUES (%s, %s, %s) 
-                   ON CONFLICT (movie_id) DO UPDATE SET 
-                   budget = EXCLUDED.budget, revenue = EXCLUDED.revenue""",
-                (m_id, row['budget'], row['revenue'])
-            )
-            count += 1
+            m_id = int(row['movie_id'])
+            if m_id in valid_movie_ids:
+                budget = int(row['budget']) if pd.notna(row['budget']) else 0
+                revenue = int(row['revenue']) if pd.notna(row['revenue']) else 0
+                
+                cur.execute(
+                    """INSERT INTO Box_Office (movie_id, budget, revenue) 
+                    VALUES (%s, %s, %s) 
+                    ON CONFLICT (movie_id) DO UPDATE SET 
+                    budget = EXCLUDED.budget, revenue = EXCLUDED.revenue""",
+                    (m_id, budget, revenue)
+                )
+                count += 1
 
     conn.commit()
     cur.close()
@@ -569,14 +572,14 @@ def run_award_etl():
     
     count = 0
     for _, row in df.iterrows():
-        m_id = int(row['movie_id'])
-        if m_id in valid_movie_ids:
-            cur.execute(
-                """INSERT INTO Award (movie_id, award_type, award_name) 
-                   VALUES (%s, %s, %s)""",
-                (m_id, row['award_type'].strip(), row['award_name'].strip())
-            )
-            count += 1
+            m_id = int(row['movie_id']) 
+            if m_id in valid_movie_ids:
+                cur.execute(
+                    """INSERT INTO Award (movie_id, award_type, award_name) 
+                    VALUES (%s, %s, %s)""",
+                    (m_id, str(row['award_type']).strip(), str(row['award_name']).strip())
+                )
+                count += 1
 
     conn.commit()
     cur.close()
