@@ -147,7 +147,7 @@ def search_movies():
 
         # Sort mapping (whitelist to prevent SQL injection)
         sort_map = {
-            'rating': 'r_stats.avg_rating',
+            'rating': 'COALESCE(r_stats.avg_rating, 0)',
             'year': 'm.release_year',
             'popularity': 'COALESCE(r_stats.rating_count, 0)',
         }
