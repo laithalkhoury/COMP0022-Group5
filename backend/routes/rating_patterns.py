@@ -25,6 +25,10 @@ def scatter_data():
         if not movie:
             return jsonify({"error": "Movie not found"}), 404
 
+        # Total number of ratings for this movie
+        cur.execute("SELECT COUNT(*) AS cnt FROM rating WHERE movie_id = %s", (movie_id,))
+        total_ratings = cur.fetchone()['cnt']
+
         # For each user who rated the selected movie, get their rating for that movie
         # and their average rating across movies that belong to ALL selected genres (AND).
         # The HAVING clause ensures we only consider movies matching every selected genre.
@@ -80,6 +84,7 @@ def scatter_data():
             "points": points,
             "count": n,
             "correlation": correlation,
+            "totalRatings": total_ratings,
         })
 
     except Exception as e:
@@ -103,10 +108,23 @@ def scatter_genre_data():
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # Build subquery for X-genre movies (must match ALL X-genres)
+        # Total ratings across all X-genre movies
         x_placeholders = ','.join(['%s'] * len(genres_x))
-        # Build subquery for Y-genre movies (must match ALL Y-genres)
         y_placeholders = ','.join(['%s'] * len(genres_y))
+
+        cur.execute(f"""
+            SELECT COUNT(*) AS cnt
+            FROM rating r
+            JOIN (
+                SELECT mg.movie_id
+                FROM movie_genre mg
+                JOIN genre g ON mg.genre_id = g.genre_id
+                WHERE g.name IN ({x_placeholders})
+                GROUP BY mg.movie_id
+                HAVING COUNT(DISTINCT g.name) = %s
+            ) x_movies ON r.movie_id = x_movies.movie_id
+        """, (*genres_x, len(genres_x)))
+        total_ratings = cur.fetchone()['cnt']
 
         # Find users who rated at least min_ratings movies in each genre group,
         # and compute their average rating per group.
@@ -174,6 +192,183 @@ def scatter_genre_data():
             "count": n,
             "correlation": correlation,
             "minRatings": min_ratings,
+            "totalRatings": total_ratings,
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@rating_patterns_bp.route('/api/rating-patterns/total-ratings', methods=['GET'])
+def total_ratings():
+    mode = request.args.get('mode')
+    movie_id = request.args.get('movie_id', type=int)
+    genres_x = request.args.getlist('genre_x')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        if mode == 'movie-vs-genre' and movie_id:
+            cur.execute("SELECT COUNT(*) AS cnt, COUNT(DISTINCT ml_user_id) AS users FROM rating WHERE movie_id = %s", (movie_id,))
+        elif mode == 'genre-vs-genre' and genres_x:
+            x_placeholders = ','.join(['%s'] * len(genres_x))
+            cur.execute(f"""
+                SELECT COUNT(*) AS cnt, COUNT(DISTINCT r.ml_user_id) AS users
+                FROM rating r
+                JOIN (
+                    SELECT mg.movie_id
+                    FROM movie_genre mg
+                    JOIN genre g ON mg.genre_id = g.genre_id
+                    WHERE g.name IN ({x_placeholders})
+                    GROUP BY mg.movie_id
+                    HAVING COUNT(DISTINCT g.name) = %s
+                ) x_movies ON r.movie_id = x_movies.movie_id
+            """, (*genres_x, len(genres_x)))
+        else:
+            return jsonify({"error": "Invalid parameters"}), 400
+
+        row = cur.fetchone()
+        return jsonify({"totalRatings": row['cnt'], "totalUsers": row['users']})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@rating_patterns_bp.route('/api/rating-patterns/threshold-counts', methods=['GET'])
+def threshold_counts():
+    """
+    Returns user counts for a given threshold.
+    - totalUsers: users whose X-axis rating meets the threshold (no Y-axis filter)
+    - scatterUsers: users who also rated >= min_ratings Y-axis genre movies (matches scatter plot)
+    """
+    mode = request.args.get('mode')
+    threshold_value = request.args.get('threshold_value', type=float)
+    threshold_type = request.args.get('threshold_type')  # 'low' or 'high'
+    movie_id = request.args.get('movie_id', type=int)
+    genres_x = request.args.getlist('genre_x')
+    genres_y = request.args.getlist('genre_y')
+    min_ratings = request.args.get('min_ratings', 1, type=int)
+
+    if threshold_value is None or threshold_type not in ('low', 'high'):
+        return jsonify({"error": "threshold_value and threshold_type required"}), 400
+
+    comparison = '<=' if threshold_type == 'low' else '>='
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        if mode == 'movie-vs-genre' and movie_id:
+            # totalUsers: users who rated this movie with rating meeting threshold
+            cur.execute(f"""
+                SELECT COUNT(DISTINCT ml_user_id) AS cnt
+                FROM rating
+                WHERE movie_id = %s AND rating {comparison} %s
+            """, (movie_id, threshold_value))
+            total_users = cur.fetchone()['cnt']
+
+            # scatterUsers: additionally must have rated >= min_ratings Y-axis genre movies
+            scatter_users = None
+            if genres_y:
+                y_placeholders = ','.join(['%s'] * len(genres_y))
+                cur.execute(f"""
+                    SELECT COUNT(*) AS cnt FROM (
+                        SELECT r1.ml_user_id
+                        FROM rating r1
+                        JOIN rating r2 ON r1.ml_user_id = r2.ml_user_id
+                        JOIN (
+                            SELECT mg.movie_id
+                            FROM movie_genre mg
+                            JOIN genre g ON mg.genre_id = g.genre_id
+                            WHERE g.name IN ({y_placeholders})
+                            GROUP BY mg.movie_id
+                            HAVING COUNT(DISTINCT g.name) = %s
+                        ) matched ON r2.movie_id = matched.movie_id
+                        WHERE r1.movie_id = %s AND r1.rating {comparison} %s
+                          AND r2.movie_id != r1.movie_id
+                        GROUP BY r1.ml_user_id, r1.rating
+                        HAVING COUNT(r2.rating) >= %s
+                    ) sub
+                """, (*genres_y, len(genres_y), movie_id, threshold_value, min_ratings))
+                scatter_users = cur.fetchone()['cnt']
+
+        elif mode == 'genre-vs-genre' and genres_x:
+            x_placeholders = ','.join(['%s'] * len(genres_x))
+            # totalUsers: users whose avg rating across X-genre movies meets threshold
+            cur.execute(f"""
+                SELECT COUNT(*) AS cnt FROM (
+                    SELECT r.ml_user_id
+                    FROM rating r
+                    JOIN (
+                        SELECT mg.movie_id
+                        FROM movie_genre mg
+                        JOIN genre g ON mg.genre_id = g.genre_id
+                        WHERE g.name IN ({x_placeholders})
+                        GROUP BY mg.movie_id
+                        HAVING COUNT(DISTINCT g.name) = %s
+                    ) x_movies ON r.movie_id = x_movies.movie_id
+                    GROUP BY r.ml_user_id
+                    HAVING COUNT(r.rating) >= %s
+                       AND AVG(r.rating) {comparison} %s
+                ) sub
+            """, (*genres_x, len(genres_x), min_ratings, threshold_value))
+            total_users = cur.fetchone()['cnt']
+
+            # scatterUsers: additionally must have rated >= min_ratings Y-axis genre movies
+            scatter_users = None
+            if genres_y:
+                y_placeholders = ','.join(['%s'] * len(genres_y))
+                cur.execute(f"""
+                    SELECT COUNT(*) AS cnt FROM (
+                        SELECT x_data.ml_user_id
+                        FROM (
+                            SELECT r.ml_user_id
+                            FROM rating r
+                            JOIN (
+                                SELECT mg.movie_id
+                                FROM movie_genre mg
+                                JOIN genre g ON mg.genre_id = g.genre_id
+                                WHERE g.name IN ({x_placeholders})
+                                GROUP BY mg.movie_id
+                                HAVING COUNT(DISTINCT g.name) = %s
+                            ) x_movies ON r.movie_id = x_movies.movie_id
+                            GROUP BY r.ml_user_id
+                            HAVING COUNT(r.rating) >= %s
+                               AND AVG(r.rating) {comparison} %s
+                        ) x_data
+                        JOIN (
+                            SELECT r.ml_user_id
+                            FROM rating r
+                            JOIN (
+                                SELECT mg.movie_id
+                                FROM movie_genre mg
+                                JOIN genre g ON mg.genre_id = g.genre_id
+                                WHERE g.name IN ({y_placeholders})
+                                GROUP BY mg.movie_id
+                                HAVING COUNT(DISTINCT g.name) = %s
+                            ) y_movies ON r.movie_id = y_movies.movie_id
+                            GROUP BY r.ml_user_id
+                            HAVING COUNT(r.rating) >= %s
+                        ) y_data ON x_data.ml_user_id = y_data.ml_user_id
+                    ) sub
+                """, (*genres_x, len(genres_x), min_ratings, threshold_value,
+                      *genres_y, len(genres_y), min_ratings))
+                scatter_users = cur.fetchone()['cnt']
+        else:
+            return jsonify({"error": "Invalid parameters"}), 400
+
+        return jsonify({
+            "totalUsers": total_users,
+            "scatterUsers": scatter_users,
         })
 
     except Exception as e:
@@ -306,16 +501,23 @@ def preference_analysis():
                 order_clause = f'avg_rating {direction}'
 
             cur.execute(f"""
-                SELECT g.name AS genre_combination,
-                       ROUND(AVG(r.rating)::numeric, 4) AS avg_rating,
-                       COUNT(DISTINCT r.ml_user_id) AS num_users
-                FROM rating r
-                JOIN movie_genre mg ON r.movie_id = mg.movie_id
-                JOIN genre g ON mg.genre_id = g.genre_id
-                WHERE r.ml_user_id IN (SELECT ml_user_id FROM filtered_users)
-                GROUP BY g.name
+                SELECT genre_combination,
+                       ROUND(AVG(avg_rating)::numeric, 4) AS avg_rating,
+                       COUNT(*) AS num_users
+                FROM (
+                    SELECT g.name AS genre_combination,
+                           r.ml_user_id,
+                           AVG(r.rating) AS avg_rating
+                    FROM rating r
+                    JOIN movie_genre mg ON r.movie_id = mg.movie_id
+                    JOIN genre g ON mg.genre_id = g.genre_id
+                    WHERE r.ml_user_id IN (SELECT ml_user_id FROM filtered_users)
+                    GROUP BY g.name, r.ml_user_id
+                    HAVING COUNT(r.rating) >= %s
+                ) sub
+                GROUP BY genre_combination
                 ORDER BY {order_clause}
-            """)
+            """, (min_ratings,))
         else:
             # pair: movies must have BOTH genres (AND logic)
             if sort_by == 'genre':
@@ -334,15 +536,22 @@ def preference_analysis():
                     JOIN genre g2 ON mg2.genre_id = g2.genre_id
                     WHERE g1.name < g2.name
                 )
-                SELECT pm.genre1 || ' + ' || pm.genre2 AS genre_combination,
-                       ROUND(AVG(r.rating)::numeric, 4) AS avg_rating,
-                       COUNT(DISTINCT r.ml_user_id) AS num_users
-                FROM rating r
-                JOIN pair_movies pm ON r.movie_id = pm.movie_id
-                WHERE r.ml_user_id IN (SELECT ml_user_id FROM filtered_users)
-                GROUP BY pm.genre1, pm.genre2
+                SELECT genre_combination,
+                       ROUND(AVG(avg_rating)::numeric, 4) AS avg_rating,
+                       COUNT(*) AS num_users
+                FROM (
+                    SELECT pm.genre1 || ' + ' || pm.genre2 AS genre_combination,
+                           r.ml_user_id,
+                           AVG(r.rating) AS avg_rating
+                    FROM rating r
+                    JOIN pair_movies pm ON r.movie_id = pm.movie_id
+                    WHERE r.ml_user_id IN (SELECT ml_user_id FROM filtered_users)
+                    GROUP BY pm.genre1, pm.genre2, r.ml_user_id
+                    HAVING COUNT(r.rating) >= %s
+                ) sub
+                GROUP BY genre_combination
                 ORDER BY {order_clause}
-            """)
+            """, (min_ratings,))
 
         rows = cur.fetchall()
         entries = [
