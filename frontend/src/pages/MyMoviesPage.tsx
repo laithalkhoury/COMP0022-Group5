@@ -230,32 +230,88 @@ interface CollectionDetailProps {
     onReorderMovies: (movies: CollectionMovie[]) => void;
 }
 
-function CollectionDetail({ collection, movies, onUpdateNotes, onRemoveMovie, onReorderMovies }: CollectionDetailProps) {
+function CollectionDetail({ collection, movies, onUpdateNotes, onRemoveMovie }: CollectionDetailProps) {
     const [notes, setNotes] = useState(collection.notes ?? '');
     const [removeTarget, setRemoveTarget] = useState<CollectionMovie | null>(null);
-    const dragItem = useRef<number | null>(null);
-    const dragOver = useRef<number | null>(null);
 
     useEffect(() => {
         setNotes(collection.notes ?? '');
     }, [collection.collectionId, collection.notes]);
 
-    function handleDragStart(idx: number) {
-        dragItem.current = idx;
+    // Group movies by genre; a movie with multiple genres appears under each
+    const genreGroups: Record<string, CollectionMovie[]> = {};
+    for (const movie of movies) {
+        const genres = movie.genres.length > 0 ? movie.genres : ['Uncategorised'];
+        for (const genre of genres) {
+            if (!genreGroups[genre]) genreGroups[genre] = [];
+            genreGroups[genre].push(movie);
+        }
     }
+    const sortedGenres = Object.keys(genreGroups).sort();
 
-    function handleDragEnter(idx: number) {
-        dragOver.current = idx;
-    }
+    function MovieCard({ movie }: { movie: CollectionMovie }) {
+        return (
+            <div className="flex gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm hover:shadow-md transition-shadow group">
+                <Link to={`/movie/${movie.id}`} className="flex-shrink-0">
+                    <img
+                        src={movie.posterUrl ?? FALLBACK_POSTER}
+                        alt={`${movie.title} poster`}
+                        className="w-20 h-[120px] object-cover rounded-lg bg-gray-100 dark:bg-gray-700"
+                        loading="lazy"
+                    />
+                </Link>
 
-    function handleDrop() {
-        if (dragItem.current === null || dragOver.current === null || dragItem.current === dragOver.current) return;
-        const items = [...movies];
-        const [dragged] = items.splice(dragItem.current, 1);
-        items.splice(dragOver.current, 0, dragged);
-        dragItem.current = null;
-        dragOver.current = null;
-        onReorderMovies(items);
+                <div className="flex flex-col gap-2 flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                        <Link
+                            to={`/movie/${movie.id}`}
+                            className="font-semibold text-base leading-snug hover:text-blue-600 dark:hover:text-blue-400 transition-colors line-clamp-2"
+                        >
+                            {movie.title}
+                        </Link>
+                        <button
+                            onClick={() => setRemoveTarget(movie)}
+                            className="flex-shrink-0 p-1 text-gray-300 hover:text-red-500 transition-colors text-sm leading-none opacity-0 group-hover:opacity-100"
+                            title="Remove from collection"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+                        <span>{movie.year}</span>
+                        {movie.runtime != null && (
+                            <>
+                                <span className="text-gray-300 dark:text-gray-600">·</span>
+                                <span>{movie.runtime} min</span>
+                            </>
+                        )}
+                    </div>
+
+                    {movie.avgRating != null && (
+                        <div className="flex items-center gap-2">
+                            <StarRating rating={movie.avgRating} />
+                            {movie.ratingCount != null && (
+                                <span className="text-xs text-gray-400">
+                                    ({movie.ratingCount.toLocaleString()} ratings)
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-1">
+                        {movie.genres.map((g) => (
+                            <span
+                                key={g}
+                                className="px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600"
+                            >
+                                {g}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -281,78 +337,16 @@ function CollectionDetail({ collection, movies, onUpdateNotes, onRemoveMovie, on
                         <p className="text-sm">No movies yet. Browse the dashboard and use the ☆ button to add movies.</p>
                     </div>
                 ) : (
-                    <div className="space-y-3">
-                        {movies.map((movie, idx) => (
-                            <div
-                                key={movie.id}
-                                draggable
-                                onDragStart={() => handleDragStart(idx)}
-                                onDragEnter={() => handleDragEnter(idx)}
-                                onDragOver={(e) => e.preventDefault()}
-                                onDrop={handleDrop}
-                                className="flex gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm hover:shadow-md transition-shadow group"
-                            >
-                                <Link to={`/movie/${movie.id}`} className="flex-shrink-0">
-                                    <img
-                                        src={movie.posterUrl ?? FALLBACK_POSTER}
-                                        alt={`${movie.title} poster`}
-                                        className="w-20 h-[120px] object-cover rounded-lg bg-gray-100 dark:bg-gray-700"
-                                        loading="lazy"
-                                    />
-                                </Link>
-
-                                <div className="flex flex-col gap-2 flex-1 min-w-0">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <Link
-                                            to={`/movie/${movie.id}`}
-                                            className="font-semibold text-base leading-snug hover:text-blue-600 dark:hover:text-blue-400 transition-colors line-clamp-2"
-                                        >
-                                            {movie.title}
-                                        </Link>
-                                        <button
-                                            onClick={() => setRemoveTarget(movie)}
-                                            className="flex-shrink-0 p-1 text-gray-300 hover:text-red-500 transition-colors text-sm leading-none opacity-0 group-hover:opacity-100"
-                                            title="Remove from collection"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-
-                                    <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
-                                        <span>{movie.year}</span>
-                                        {movie.runtime != null && (
-                                            <>
-                                                <span className="text-gray-300 dark:text-gray-600">·</span>
-                                                <span>{movie.runtime} min</span>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {movie.avgRating != null && (
-                                        <div className="flex items-center gap-2">
-                                            <StarRating rating={movie.avgRating} />
-                                            {movie.ratingCount != null && (
-                                                <span className="text-xs text-gray-400">
-                                                    ({movie.ratingCount.toLocaleString()} ratings)
-                                                </span>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    <div className="flex flex-wrap gap-1">
-                                        {movie.genres.map((g) => (
-                                            <span
-                                                key={g}
-                                                className="px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600"
-                                            >
-                                                {g}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center flex-shrink-0 cursor-grab text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500">
-                                    ⠿
+                    <div className="space-y-8">
+                        {sortedGenres.map((genre) => (
+                            <div key={genre}>
+                                <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 border-b border-gray-100 dark:border-gray-800 pb-1">
+                                    {genre}
+                                </h2>
+                                <div className="space-y-3">
+                                    {genreGroups[genre].map((movie) => (
+                                        <MovieCard key={movie.id} movie={movie} />
+                                    ))}
                                 </div>
                             </div>
                         ))}
